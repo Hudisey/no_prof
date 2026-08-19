@@ -60,7 +60,7 @@
         .friend-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: var(--border); flex-shrink: 0; }
 
         /* Bildirim Rozeti & Zil */
-        .bell-container { position: relative; display: inline-block; }
+        .bell-container { position: relative; display: inline-block; flex-shrink: 0; }
         .discord-badge { background: #ed4245; color: white; font-size: 10px; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: absolute; top: -4px; right: -4px; font-weight: bold; }
 
         /* İstekler Açılır Kutusu */
@@ -99,12 +99,12 @@
                 <button id="group-btn" onclick="openGroupModal()" style="padding: 4px 8px; font-size: 11px; border-radius: 8px;">Grup Kur</button>
             </div>
             
-            <!-- Arkadaş Ekleme ve Zil Alanı -->
-            <div style="display: flex; gap: 6px; align-items: center;">
-                <input type="text" id="friend-input" placeholder="arkadaş ekle..." style="width: 120px; padding: 8px 10px; font-size: 12px; border-radius: 12px;">
+            <!-- Boşluksuz Kompakt Arkadaş Ekleme ve Zil Alanı -->
+            <div style="display: flex; gap: 6px; align-items: center; width: 100%;">
+                <input type="text" id="friend-input" placeholder="arkadaş ekle..." style="flex: 1; min-width: 0; padding: 8px 10px; font-size: 12px; border-radius: 12px;">
                 <button onclick="sendFriendRequest()" style="padding: 8px 10px; font-size: 13px; border-radius: 12px;" title="Arkadaş Ekle">+</button>
                 
-                <div class="bell-container" style="margin-left: auto;">
+                <div class="bell-container">
                     <button onclick="toggleRequestsMenu(event)" style="padding: 8px 10px; font-size: 13px; border-radius: 12px; background: var(--accent); color: var(--text); border: 1px solid var(--border);" title="İstekler">🔔</button>
                     <span id="req-badge" class="discord-badge hidden">0</span>
                 </div>
