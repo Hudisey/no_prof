@@ -24,7 +24,7 @@ def init_db():
         db.execute("""CREATE TABLE IF NOT EXISTS users 
                       (username TEXT PRIMARY KEY, avatar TEXT)""")
         db.execute("""CREATE TABLE IF NOT EXISTS friendships 
-                      (username TEXT, friend_username TEXT, status TEXT)""")
+                      (username TEXT, friend_username TEXT)""")
         db.execute("""CREATE TABLE IF NOT EXISTS messages 
                       (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, receiver TEXT, is_group INTEGER, message TEXT)""")
         db.execute("""CREATE TABLE IF NOT EXISTS groups 
@@ -64,8 +64,8 @@ def update_avatar():
         return jsonify({"success": True})
     return jsonify({"success": False})
 
-@app.route("/api/friend-request", methods=["POST", "GET"])
-def handle_friend_requests():
+@app.route("/api/friends", methods=["POST", "GET"])
+def handle_friends():
     db = get_db()
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
@@ -79,50 +79,25 @@ def handle_friend_requests():
         if not user_check:
             return jsonify({"success": False, "error": "Böyle bir kullanıcı yok!"})
 
-        existing = db.execute("SELECT * FROM friendships WHERE (username = ? AND friend_username = ?) OR (username = ? AND friend_username = ?)", 
-                              (username, friend_username, friend_username, username)).fetchone()
+        existing = db.execute("SELECT * FROM friendships WHERE username = ? AND friend_username = ?", 
+                              (username, friend_username)).fetchone()
         if existing:
-            return jsonify({"success": False, "error": "Zaten istek atılmış veya arkadaşsınız!"})
+            return jsonify({"success": False, "error": "Bu kullanıcı zaten ekli!"})
 
-        db.execute("INSERT INTO friendships (username, friend_username, status) VALUES (?, ?, ?)", (username, friend_username, 'pending'))
+        db.execute("INSERT INTO friendships (username, friend_username) VALUES (?, ?)", (username, friend_username))
         db.commit()
         return jsonify({"success": True})
     else:
         username = request.args.get("username")
-        pending = db.execute("SELECT f.username, u.avatar FROM friendships f LEFT JOIN users u ON f.username = u.username WHERE f.friend_username = ? AND f.status = 'pending'", (username,)).fetchall()
-        
-        friends_cursor = db.execute("""
-            SELECT CASE WHEN username = ? THEN friend_username ELSE username END as fname, u.avatar 
+        cursor = db.execute("""
+            SELECT f.friend_username, u.avatar 
             FROM friendships f 
-            LEFT JOIN users u ON u.username = CASE WHEN username = ? THEN friend_username ELSE username END
-            WHERE (username = ? OR friend_username = ?) AND status = 'accepted'
-        """, (username, username, username, username))
-
-        friends = []
-        for row in friends_cursor.fetchall():
-            if row["fname"]:
-                friends.append({"friend_username": row["fname"], "avatar": row["avatar"] or ""})
-
-        return jsonify({
-            "success": True, 
-            "pending": [{"username": r["username"], "avatar": r["avatar"] or ""} for r in pending],
-            "friends": friends
-        })
-
-@app.route("/api/friend-action", methods=["POST"])
-def friend_action():
-    data = request.get_json(silent=True) or {}
-    username = data.get("username")
-    friend_username = data.get("friend_username")
-    action = data.get("action")
-
-    db = get_db()
-    if action == "accept":
-        db.execute("UPDATE friendships SET status = 'accepted' WHERE username = ? AND friend_username = ?", (friend_username, username))
-    else:
-        db.execute("DELETE FROM friendships WHERE username = ? AND friend_username = ?", (friend_username, username))
-    db.commit()
-    return jsonify({"success": True})
+            LEFT JOIN users u ON f.friend_username = u.username 
+            WHERE f.username = ?
+        """, (username,))
+        
+        friends = [{"friend_username": row["friend_username"], "avatar": row["avatar"] or ""} for row in cursor.fetchall()]
+        return jsonify({"success": True, "friends": friends})
 
 @app.route("/api/groups", methods=["POST", "GET"])
 def handle_groups():
