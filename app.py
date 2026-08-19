@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template_string
 
 app = Flask(__name__)
 
+# Bellek içi veritabanı
 users_db = {}
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -117,9 +118,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         async function sendFriendRequest() {
             const friend_username = document.getElementById('friend-input').value.trim();
             if(!friend_username) return;
-            if(!currentUser) {
-                currentUser = localStorage.getItem('noprof_user');
-            }
+            if(!currentUser) currentUser = localStorage.getItem('noprof_user');
             
             const res = await fetch('/api/friend-request', {
                 method: 'POST',
@@ -127,7 +126,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 body: JSON.stringify({username: currentUser, friend_username: friend_username})
             });
             const resData = await res.json();
-            if(res.ok) {
+            if(res.ok && resData.success) {
                 alert(isTr ? "İstek başarıyla gönderildi!" : "Request sent successfully!");
                 document.getElementById('friend-input').value = '';
             } else {
@@ -168,6 +167,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         async function loadData() {
+            if(!currentUser) currentUser = localStorage.getItem('noprof_user');
             if(!currentUser) return;
             try {
                 const reqRes = await fetch(`/api/friend-request?username=${encodeURIComponent(currentUser)}`);
@@ -218,7 +218,7 @@ def login():
     data = request.json or {}
     username = data.get('username')
     if not username:
-        return jsonify({"success": False, "error": "Kullanıcı adı gerekli!"}), 400
+        return jsonify({"success": False, "error": "Kullanıcı adı gerekli!"}), 200
     if username not in users_db:
         users_db[username] = {"avatar": "", "pending": [], "friends": []}
     return jsonify({"success": True, "username": username})
@@ -227,21 +227,24 @@ def login():
 def friend_request():
     if request.method == 'GET':
         username = request.args.get('username')
-        user_data = users_db.get(username, {"pending": []})
-        return jsonify({"pending": user_data.get("pending", [])})
+        if not username or username not in users_db:
+            return jsonify({"pending": []})
+        return jsonify({"pending": users_db[username].get("pending", [])})
     
     data = request.json or {}
     sender = data.get('username')
     receiver = data.get('friend_username')
     
     if not sender or not receiver:
-        return jsonify({"success": False, "error": "Eksik parametre!"}), 400
+        return jsonify({"success": False, "error": "Eksik parametre!"}), 200
         
+    if sender not in users_db:
+        users_db[sender] = {"avatar": "", "pending": [], "friends": []}
     if receiver not in users_db:
         users_db[receiver] = {"avatar": "", "pending": [], "friends": []}
         
     if sender == receiver:
-        return jsonify({"success": False, "error": "Kendine istek atamazsın!"}), 400
+        return jsonify({"success": False, "error": "Kendine istek atamazsın!"}), 200
         
     receiver_data = users_db[receiver]
     if "pending" not in receiver_data:
@@ -249,7 +252,7 @@ def friend_request():
         
     existing_senders = [p["username"] for p in receiver_data["pending"]]
     if sender in existing_senders:
-        return jsonify({"success": False, "error": "Zaten istek atılmış!"}), 400
+        return jsonify({"success": False, "error": "Zaten istek atılmış!"}), 200
         
     receiver_data["pending"].append({"username": sender})
     return jsonify({"success": True})
@@ -264,7 +267,7 @@ def friend_action():
         users_db[username]["pending"] = [p for p in users_db[username]["pending"] if p["username"] != friend_username]
     return jsonify({"success": True})
 
-@app.route('/api/avatar', methods=['POST'])
+@app.routes if hasattr(app, 'routes') else app.route('/api/avatar', methods=['POST'])
 def avatar():
     data = request.json or {}
     username = data.get('username')
@@ -273,7 +276,7 @@ def avatar():
     if username in users_db:
         users_db[username]["avatar"] = avatar_data
         return jsonify({"success": True})
-    return jsonify({"success": False}), 404
+    return jsonify({"success": False}), 200
 
 @app.route('/api/reset', methods=['POST'])
 def reset():
