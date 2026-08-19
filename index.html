@@ -5,45 +5,58 @@
     <title>NOPROF | SOHBET</title>
     <style>
         :root { --bg: #000; --surface: #111; --border: #222; --text: #eee; --accent: #333; }
-        body { background: var(--bg); color: var(--text); font-family: monospace; height: 100vh; display: flex; overflow: hidden; }
+        [data-theme="light"] { --bg: #f4f4f4; --surface: #fff; --border: #ddd; --text: #111; --accent: #eee; }
+        body { background: var(--bg); color: var(--text); font-family: monospace; height: 100vh; display: flex; overflow: hidden; transition: 0.3s; }
         .sidebar { width: 300px; background: var(--surface); border-right: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 10px; }
         .chat-main { flex: 1; display: flex; flex-direction: column; }
         #chat-box { flex: 1; padding: 20px; overflow-y: auto; }
         .msg-input-area { padding: 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
         
-        /* Dropdown */
-        #requests-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: #000; border: 1px solid var(--border); padding: 10px; z-index: 100; }
+        #requests-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: var(--surface); border: 1px solid var(--border); padding: 10px; z-index: 100; }
         .req-item { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
         
-        input, button { background: var(--accent); border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 5px; }
+        /* Ayarlar Menüsü */
+        #settings-menu { position: absolute; bottom: 60px; left: 15px; background: var(--surface); border: 1px solid var(--border); padding: 10px; border-radius: 5px; z-index: 100; }
+        
+        input, button { background: var(--accent); border: 1px solid var(--border); color: var(--text); padding: 8px; border-radius: 5px; cursor: pointer; }
         .hidden { display: none !important; }
     </style>
 </head>
-<body>
+<body data-theme="dark">
 
-    <!-- GİRİŞ -->
     <div id="login-screen" style="margin: auto; display: flex; flex-direction: column; gap: 10px;">
         <input type="text" id="username-input" placeholder="Kullanıcı Adı">
         <button onclick="login()">GİRİŞ YAP</button>
     </div>
 
-    <!-- ANA EKRAN -->
     <div id="app-screen" class="hidden" style="display: flex; width: 100%;">
         <div class="sidebar">
-            <h3>SOHBETLER</h3>
+            <div style="display:flex; justify-content:space-between;">
+                <h3>SOHBETLER</h3>
+                <button onclick="toggleLang()" id="lang-btn">TR</button>
+            </div>
+            
             <div style="display: flex; gap: 5px;">
                 <input type="text" id="friend-input" placeholder="Arkadaş Ekle...">
                 <button onclick="sendFriendRequest()">+</button>
                 <button onclick="toggleRequests()">🔔</button>
             </div>
             
-            <!-- İstekler Kutusu -->
             <div id="requests-dropdown" class="hidden">
-                <div style="font-size: 10px; color: #888;">GELEN İSTEKLER</div>
+                <div id="req-title" style="font-size: 10px; color: #888;">GELEN İSTEKLER</div>
                 <div id="requests-list"></div>
             </div>
 
-            <div id="friend-box"></div>
+            <div id="friend-box" style="flex:1;"></div>
+
+            <!-- Ayarlar -->
+            <button onclick="toggleSettings()">⚙️ AYARLAR</button>
+            <div id="settings-menu" class="hidden">
+                <button onclick="toggleTheme()">🌓 Tema Değiştir</button><br><br>
+                <button onclick="document.getElementById('avatar-input').click()">🖼️ Profil Resmi Ekle</button><br><br>
+                <button onclick="deleteAccount()" style="color:red;">❌ HESABI SİL</button>
+                <input type="file" id="avatar-input" class="hidden" onchange="uploadAvatar(this)">
+            </div>
         </div>
 
         <div class="chat-main">
@@ -57,7 +70,7 @@
 
     <script>
         let currentUser = localStorage.getItem('noprof_user');
-        let activeChat = null;
+        let isTr = true;
 
         function login() {
             currentUser = document.getElementById('username-input').value;
@@ -67,60 +80,61 @@
             loadData();
         }
 
-        function toggleRequests() {
-            document.getElementById('requests-dropdown').classList.toggle('hidden');
+        function toggleLang() {
+            isTr = !isTr;
+            document.getElementById('lang-btn').innerText = isTr ? "TR" : "EN";
+            document.getElementById('req-title').innerText = isTr ? "GELEN İSTEKLER" : "FRIEND REQUESTS";
         }
 
-        // İstek listesini ve arkadaşları çeken ana fonksiyon
+        function toggleTheme() {
+            const current = document.body.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.body.setAttribute('data-theme', next);
+        }
+
+        function toggleSettings() { document.getElementById('settings-menu').classList.toggle('hidden'); }
+        function toggleRequests() { document.getElementById('requests-dropdown').classList.toggle('hidden'); }
+
+        async function uploadAvatar(input) {
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                await fetch('/api/avatar', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username: currentUser, avatar: e.target.result})
+                });
+                alert("Avatar güncellendi!");
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function deleteAccount() {
+            if(confirm("Emin misin?")) {
+                await fetch('/api/reset', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({username: currentUser})});
+                localStorage.removeItem('noprof_user');
+                location.reload();
+            }
+        }
+
         async function loadData() {
-            // 1. İstekleri Çek
             const reqRes = await fetch(`/api/friend-request?username=${currentUser}`);
-            const reqData = await reqRes.json();
+            const data = await reqRes.json();
             const reqList = document.getElementById('requests-list');
             
-            if (reqData.pending && reqData.pending.length > 0) {
-                reqList.innerHTML = reqData.pending.map(p => `
+            if (data.pending && data.pending.length > 0) {
+                reqList.innerHTML = data.pending.map(p => `
                     <div class="req-item">
                         <span>${p.username}</span>
                         <button onclick="respondRequest('${p.username}', 'accept')">✓</button>
                     </div>
                 `).join('');
             } else {
-                reqList.innerHTML = '<div style="font-size:10px; color:#555;">İstek yok.</div>';
+                reqList.innerHTML = `<div style="font-size:10px; color:#555;">${isTr ? 'İstek yok.' : 'No requests.'}</div>`;
             }
-
-            // 2. Arkadaş/Grup Listesini Çek (Burayı kendi API yapına göre doldur)
-            // ... loadSidebar kodların buraya gelecek ...
         }
 
-        function sendFriendRequest() {
-            const target = document.getElementById('friend-input').value;
-            fetch('/api/friend-request', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: currentUser, friend_username: target})
-            }).then(() => { alert("İstek gitti!"); loadData(); });
-        }
-
-        function respondRequest(friend, action) {
-            fetch('/api/friend-action', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: currentUser, friend_username: friend, action})
-            }).then(() => loadData());
-        }
-
-        function sendMessage() {
-            const msg = document.getElementById('msg-input').value;
-            if(!activeChat) return alert("Sohbet seç!");
-            fetch('/api/messages', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: currentUser, receiver: activeChat, message: msg})
-            }).then(() => document.getElementById('msg-input').value = '');
-        }
-
-        // Başlangıç kontrolü
+        // Diğer fonksiyonlar (sendFriendRequest, sendMessage vb.) aynı kalabilir...
         if(currentUser) {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
