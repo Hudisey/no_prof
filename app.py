@@ -8,7 +8,7 @@ DATABASE = "noprof.db"
 def get_db():
     db = getattr(g, "_database", None)
     if db is None:
-        db = getattr(g, "_database", sqlite3.connect(DATABASE))
+        db = g._database = sqlite3.connect(DATABASE)
         db.row_factory = sqlite3.Row
     return db
 
@@ -23,7 +23,6 @@ def init_db():
         db = get_db()
         db.execute("""CREATE TABLE IF NOT EXISTS users 
                       (username TEXT PRIMARY KEY, avatar TEXT)""")
-        # status: 'pending' (beklemede) veya 'accepted' (kabul edildi)
         db.execute("""CREATE TABLE IF NOT EXISTS friendships 
                       (username TEXT, friend_username TEXT, status TEXT)""")
         db.execute("""CREATE TABLE IF NOT EXISTS messages 
@@ -90,20 +89,24 @@ def handle_friend_requests():
         return jsonify({"success": True})
     else:
         username = request.args.get("username")
-        # Bana gelen bekleyen istekler
         pending = db.execute("SELECT f.username, u.avatar FROM friendships f LEFT JOIN users u ON f.username = u.username WHERE f.friend_username = ? AND f.status = 'pending'", (username,)).fetchall()
-        # Kabul edilmiş arkadaşlar
-        friends = db.execute("""
+        
+        friends_cursor = db.execute("""
             SELECT CASE WHEN username = ? THEN friend_username ELSE username END as fname, u.avatar 
             FROM friendships f 
             LEFT JOIN users u ON u.username = CASE WHEN username = ? THEN friend_username ELSE username END
             WHERE (username = ? OR friend_username = ?) AND status = 'accepted'
-        """, (username, username, username, username)).fetchall()
+        """, (username, username, username, username))
+
+        friends = []
+        for row in friends_cursor.fetchall():
+            if row["fname"]:
+                friends.append({"friend_username": row["fname"], "avatar": row["avatar"] or ""})
 
         return jsonify({
             "success": True, 
-            "pending": [{"username": r["username"], "avatar": r["avatar"]} for r in pending],
-            "friends": [{"friend_username": r["fname"], "avatar": r["avatar"]} for r in friends]
+            "pending": [{"username": r["username"], "avatar": r["avatar"] or ""} for r in pending],
+            "friends": friends
         })
 
 @app.route("/api/friend-action", methods=["POST"])
@@ -111,7 +114,7 @@ def friend_action():
     data = request.get_json(silent=True) or {}
     username = data.get("username")
     friend_username = data.get("friend_username")
-    action = data.get("action") # accept veya reject
+    action = data.get("action")
 
     db = get_db()
     if action == "accept":
@@ -127,7 +130,7 @@ def handle_groups():
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         group_name = data.get("group_name", "").strip()
-        members = data.get("members", []) # Liste
+        members = data.get("members", [])
         if not group_name:
             return jsonify({"success": False, "error": "Grup adı boş olamaz!"})
         
@@ -147,7 +150,7 @@ def handle_messages():
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         username = data.get("username")
-        receiver = data.get("receiver") # arkadaş veya grup adı
+        receiver = data.get("receiver")
         is_group = data.get("is_group", 0)
         message = data.get("message")
         if username and message:
