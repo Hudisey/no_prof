@@ -26,6 +26,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .msg-input-area { padding: 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
         #requests-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
         .req-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+        .friend-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+        .friend-item:hover { background: var(--accent); border-color: var(--border); }
         .bell-container { position: relative; display: inline-block; }
         .discord-badge { background: #ed4245; color: white; font-size: 9px; width: 15px; height: 15px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: absolute; top: -4px; right: -4px; font-weight: bold; }
         #settings-menu { position: absolute; bottom: 65px; left: 15px; right: 15px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px; z-index: 100; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
@@ -61,7 +63,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <div id="req-title" style="font-size: 10px; color: #888; margin-bottom: 6px;">GELEN İSTEKLER</div>
                 <div id="requests-list"></div>
             </div>
-            <div id="friend-box" style="flex:1; overflow-y: auto; margin-top: 5px;"></div>
+            <div id="friend-box" style="flex:1; overflow-y: auto; margin-top: 5px; display: flex; flex-direction: column; gap: 4px;"></div>
             <button onclick="toggleSettings()" class="settings-btn" style="justify-content: center; font-weight: bold;">⚙️ AYARLAR</button>
             <div id="settings-menu" class="hidden">
                 <button onclick="toggleTheme()" class="settings-btn">🌓 Tema Değiştir</button>
@@ -72,8 +74,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
         </div>
         <div class="chat-main">
-            <div id="chat-box"></div>
-            <div class="msg-input-area">
+            <div id="chat-box" style="display: flex; align-items: center; justify-content: center; color: #555;">Bir sohbet seçin</div>
+            <div class="msg-input-area hidden" id="msg-area">
                 <input type="text" id="msg-input" style="flex:1" placeholder="Mesaj yaz...">
                 <button onclick="sendMessage()">GÖNDER</button>
             </div>
@@ -81,6 +83,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
     <script>
         let currentUser = localStorage.getItem('noprof_user');
+        let currentChat = null;
         let isTr = true;
 
         function login() {
@@ -143,6 +146,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             loadData();
         }
 
+        function openChat(username) {
+            currentChat = username;
+            document.getElementById('chat-boxinnerHTML'] = '';
+            document.getElementById('chat-box').innerHTML = `<div style="color:#888; font-size:13px;">${username} ile sohbet başlıyor...</div>`;
+            document.getElementById('msg-area').classList.remove('hidden');
+        }
+
         async function uploadAvatar(input) {
             const file = input.files[0];
             if(!file) return;
@@ -170,8 +180,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             if(!currentUser) currentUser = localStorage.getItem('noprof_user');
             if(!currentUser) return;
             try {
-                const reqRes = await fetch(`/api/friend-request?username=${encodeURIComponent(currentUser)}`);
-                const data = await reqRes.json();
+                const res = await fetch(`/api/user-data?username=${encodeURIComponent(currentUser)}`);
+                const data = await res.json();
+                
+                // İstekler
                 const reqList = document.getElementById('requests-list');
                 const badge = document.getElementById('req-badge');
                 if (data.pending && data.pending.length > 0) {
@@ -190,12 +202,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     badge.classList.add('hidden');
                     reqList.innerHTML = `<div style="font-size:11px; color:#737373; text-align:center; padding: 6px;">${isTr ? 'İstek yok.' : 'No requests.'}</div>`;
                 }
+
+                // Arkadaşlar / Sohbetler
+                const friendBox = document.getElementById('friend-box');
+                if (data.friends && data.friends.length > 0) {
+                    friendBox.innerHTML = data.friends.map(f => `
+                        <div class="friend-item" onclick="openChat('${f}')">
+                            <div style="width:30px; height:30px; background:#333; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold;">${f[0].toUpperCase()}</div>
+                            <span style="font-size:13px; font-weight:bold;">${f}</span>
+                        </div>
+                    `).join('');
+                } else {
+                    friendBox.innerHTML = `<div style="font-size:11px; color:#737373; text-align:center; padding: 10px;">${isTr ? 'Henüz arkadaşın yok.' : 'No friends yet.'}</div>`;
+                }
             } catch(e) {}
         }
 
         function sendMessage() {
             const msg = document.getElementById('msg-input').value.trim();
             if(!msg) return;
+            document.getElementById('chat-box').innerHTML += `<div style="margin: 5px 0;"><b>${currentUser}:</b> ${msg}</div>`;
             document.getElementById('msg-input').value = '';
         }
 
@@ -223,14 +249,16 @@ def login():
         users_db[username] = {"avatar": "", "pending": [], "friends": []}
     return jsonify({"success": True, "username": username})
 
-@app.route('/api/friend-request', methods=['GET', 'POST'])
+@app.route('/api/user-data', methods=['GET'])
+def user_data():
+    username = request.args.get('username')
+    if not username or username not in users_db:
+        return jsonify({"pending": [], "friends": []})
+    u = users_db[username]
+    return jsonify({"pending": u.get("pending", []), "friends": u.get("friends", [])})
+
+@app.route('/api/friend-request', methods=['POST'])
 def friend_request():
-    if request.method == 'GET':
-        username = request.args.get('username')
-        if not username or username not in users_db:
-            return jsonify({"pending": []})
-        return jsonify({"pending": users_db[username].get("pending", [])})
-    
     data = request.json or {}
     sender = data.get('username')
     receiver = data.get('friend_username')
@@ -262,12 +290,20 @@ def friend_action():
     data = request.json or {}
     username = data.get('username')
     friend_username = data.get('friend_username')
+    action = data.get('action')
     
-    if username in users_db and "pending" in users_db[username]:
+    if username in users_db:
         users_db[username]["pending"] = [p for p in users_db[username]["pending"] if p["username"] != friend_username]
+        if action == 'accept':
+            if friend_username not in users_db[username]["friends"]:
+                users_db[username]["friends"].append(friend_username)
+            if friend_username in users_db:
+                if username not in users_db[friend_username]["friends"]:
+                    users_db[friend_username]["friends"].append(username)
+                    
     return jsonify({"success": True})
 
-@app.routes if hasattr(app, 'routes') else app.route('/api/avatar', methods=['POST'])
+@app.route('/api/avatar', methods=['POST'])
 def avatar():
     data = request.json or {}
     username = data.get('username')
