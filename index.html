@@ -43,7 +43,7 @@
         
         #chat-box { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; justify-content: flex-start; }
         .message { background: var(--surface); border: 1px solid var(--border); padding: 12px 16px; border-radius: 12px; max-width: 65%; word-break: break-all; font-size: 13px; text-align: left; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .message b { color: var(--text-dim); margin-right: 8px; display: inline-block; }
+        .message .msg-user { color: var(--text-dim); font-size: 11px; margin-bottom: 4px; font-weight: bold; display: block; }
 
         .input-box { display: flex; padding: 15px 25px; background: var(--surface); border-top: 1px solid var(--border); gap: 12px; align-items: center; }
         .input-box input { flex: 1; text-align: left; border-radius: 12px; }
@@ -59,8 +59,10 @@
         .settings-btn:hover { background: var(--accent); transform: rotate(45deg); }
 
         /* Ayarlar Menü Balonu */
-        .settings-menu { position: absolute; bottom: 55px; left: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; width: 200px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 100; }
-        .danger-btn { background: rgba(255, 68, 68, 0.1); border: 1px solid rgba(255, 68, 68, 0.3); color: #ff4444; width: 100%; padding: 8px; border-radius: 8px; font-size: 12px; text-align: center; }
+        .settings-menu { position: absolute; bottom: 55px; left: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; width: 210px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 100; }
+        .action-btn { background: var(--accent); border: 1px solid var(--border); color: var(--text); width: 100%; padding: 8px; border-radius: 8px; font-size: 12px; text-align: center; cursor: pointer; font-family: monospace; transition: all 0.2s; }
+        .action-btn:hover { opacity: 0.8; }
+        .danger-btn { background: rgba(255, 68, 68, 0.1); border: 1px solid rgba(255, 68, 68, 0.3); color: #ff4444; width: 100%; padding: 8px; border-radius: 8px; font-size: 12px; text-align: center; cursor: pointer; font-family: monospace; transition: all 0.2s; }
         .danger-btn:hover { background: #ff4444; color: #fff; }
     </style>
 </head>
@@ -90,6 +92,7 @@
                 <div class="settings-btn" onclick="toggleSettingsMenu(event)">⚙️</div>
                 <!-- Ayarlar Pop-up Menüsü -->
                 <div class="settings-menu hidden" id="settings-menu">
+                    <button class="action-btn" id="txt-profile-btn" onclick="changeProfile()">PROFİLİ DEĞİŞTİR</button>
                     <button class="danger-btn" id="txt-reset-btn" onclick="resetAccount()">HESABI SİL</button>
                 </div>
             </div>
@@ -114,8 +117,8 @@
         let messageInterval = null;
 
         const texts = {
-            tr: { loginBtn: "GİRİŞ", usernamePlaceholder: "kullanıcı adı...", friendsTitle: "ARKADAŞLAR", friendPlaceholder: "ekle...", resetBtn: "HESABI SİL", sendBtn: "GÖNDER", msgPlaceholder: "mesaj yaz..." },
-            en: { loginBtn: "LOGIN", usernamePlaceholder: "username...", friendsTitle: "FRIENDS", friendPlaceholder: "add...", resetBtn: "DELETE ACCOUNT", sendBtn: "SEND", msgPlaceholder: "type a message..." }
+            tr: { loginBtn: "GİRİŞ", usernamePlaceholder: "kullanıcı adı...", friendsTitle: "ARKADAŞLAR", friendPlaceholder: "ekle...", profileBtn: "PROFİLİ DEĞİŞTİR", resetBtn: "HESABI SİL", sendBtn: "GÖNDER", msgPlaceholder: "mesaj yaz..." },
+            en: { loginBtn: "LOGIN", usernamePlaceholder: "username...", friendsTitle: "FRIENDS", friendPlaceholder: "add...", profileBtn: "CHANGE PROFILE", resetBtn: "DELETE ACCOUNT", sendBtn: "SEND", msgPlaceholder: "type a message..." }
         };
 
         function toggleLang() {
@@ -136,7 +139,6 @@
             menu.classList.toggle('hidden');
         }
 
-        // Menü açıkken dışarı tıklanırsa kapatma
         window.addEventListener('click', () => {
             const menu = document.getElementById('settings-menu');
             if(menu && !menu.classList.contains('hidden')) {
@@ -150,6 +152,7 @@
             document.getElementById('username-input').placeholder = t.usernamePlaceholder;
             document.getElementById('txt-friends-title').innerText = t.friendsTitle;
             document.getElementById('friend-input').placeholder = t.friendPlaceholder;
+            document.getElementById('txt-profile-btn').innerText = t.profileBtn;
             document.getElementById('txt-reset-btn').innerText = t.resetBtn;
             document.getElementById('txt-send-btn').innerText = t.sendBtn;
             document.getElementById('msg-input').placeholder = t.msgPlaceholder;
@@ -181,6 +184,25 @@
             document.getElementById('app-screen').classList.remove('hidden');
             loadFriends();
             setInterval(loadFriends, 4000);
+        }
+
+        function changeProfile() {
+            const newUsername = prompt("Yeni kullanıcı adını gir:");
+            if(!newUsername || !newUsername.trim()) return;
+            
+            fetch('/api/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: newUsername.trim()})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    localStorage.setItem('noprof_user', data.username);
+                    currentUser = data.username;
+                    location.reload();
+                }
+            });
         }
 
         function selectChat(username, event) {
@@ -221,7 +243,12 @@
                         box.innerHTML = `<div style="color: var(--text-dim); margin: auto;">Henüz mesaj yok. İlk mesajı sen yaz!</div>`;
                         return;
                     }
-                    box.innerHTML = data.messages.map(m => `<div class="message"><b>${m.username}:</b> ${m.message}</div>`).join('');
+                    box.innerHTML = data.messages.map(m => `
+                        <div class="message">
+                            <span class="msg-user">@${m.username}</span>
+                            <div>${m.message}</div>
+                        </div>
+                    `).join('');
                     box.scrollTop = box.scrollHeight;
                 }
             });
