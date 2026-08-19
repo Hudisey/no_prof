@@ -43,7 +43,6 @@ def login():
         return jsonify({"success": False, "error": "Kullanıcı adı boş olamaz!"})
 
     db = get_db()
-    # Kullanıcı yoksa varsayılan avatar ile oluştur, varsa güncelleme yapma
     db.execute("INSERT OR IGNORE INTO users (username, avatar) VALUES (?, ?)", 
                (username, "https://api.dicebear.com/7.x/identicon/svg?seed=" + username))
     db.commit()
