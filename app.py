@@ -1,8 +1,35 @@
 import os
-from flask import Flask, jsonify, render_template, request
+import sqlite3
+from flask import Flask, g, jsonify, render_template, request
 
-# HTML dosyalarının app.py ile aynı klasörde olduğunu belirtiyoruz
 app = Flask(__name__, template_folder='.')
+DATABASE = "noprof.db"
+
+def get_db():
+    db = getattr(g, "_database", None)
+    if db is None:
+        db = g._database = sqlite3.connect(DATABASE)
+        db.row_factory = sqlite3.Row
+    return db
+
+@app.teardown_appcontext
+def close_connection(exception):
+    db = getattr(g, "_database", None)
+    if db is not None:
+        db.close()
+
+def init_db():
+    with app.app_context():
+        db = get_db()
+        db.execute("""CREATE TABLE IF NOT EXISTS users 
+                      (username TEXT PRIMARY KEY)""")
+        db.execute("""CREATE TABLE IF NOT EXISTS messages 
+                      (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, friend_username TEXT, message TEXT)""")
+        db.execute("""CREATE TABLE IF NOT EXISTS friends 
+                      (username TEXT, friend_username TEXT)""")
+        db.commit()
+
+init_db()
 
 @app.route("/")
 def index():
@@ -14,23 +41,78 @@ def login():
     username = data.get("username", "").strip()
     if not username:
         return jsonify({"success": False, "error": "Kullanıcı adı boş olamaz!"})
-    return jsonify({"success": True, "username": username})
 
-@app.route("/api/messages", methods=["GET", "POST"])
-def handle_messages():
-    if request.method == "POST":
-        return jsonify({"success": True})
-    return jsonify({"success": True, "messages": []})
+    db = get_db()
+    db.execute("INSERT OR IGNORE INTO users (username) VALUES (?)", (username,))
+    db.commit()
+    return jsonify({"success": True, "username": username})
 
 @app.route("/api/friends", methods=["GET", "POST"])
 def handle_friends():
+    db = get_db()
     if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        username = data.get("username")
+        friend_username = data.get("friend_username", "").strip()
+
+        if not friend_username:
+            return jsonify({"success": False, "error": "Boş olamaz"})
+
+        user_check = db.execute("SELECT * FROM users WHERE username = ?", (friend_username,)).fetchone()
+        if not user_check:
+            return jsonify({"success": False, "error": "Böyle bir kullanıcı yok!"})
+
+        # Zaten ekli mi kontrol et
+        existing = db.execute("SELECT * FROM friends WHERE username = ? AND friend_username = ?", (username, friend_username)).fetchone()
+        if not existing:
+            db.execute("INSERT INTO friends (username, friend_username) VALUES (?, ?)", (username, friend_username))
+            db.commit()
+
         return jsonify({"success": True})
-    return jsonify({"success": True, "friends": []})
+    else:
+        username = request.args.get("username")
+        cursor = db.execute("SELECT friend_username FROM friends WHERE username = ?", (username,))
+        friends = [row["friend_username"] for row in cursor.fetchall()]
+        return jsonify({"success": True, "friends": friends})
+
+@app.route("/api/messages", methods=["GET", "POST"])
+def handle_messages():
+    db = get_db()
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        username = data.get("username")
+        friend_username = data.get("friend_username")
+        message = data.get("message")
+        if username and message:
+            db.execute(
+                "INSERT INTO messages (username, friend_username, message) VALUES (?, ?, ?)",
+                (username, friend_username, message),
+            )
+            db.commit()
+            return jsonify({"success": True})
+        return jsonify({"success": False})
+    else:
+        username = request.args.get("username")
+        friend_username = request.args.get("friend_username")
+        cursor = db.execute(
+            "SELECT username, message FROM messages WHERE (username = ? AND friend_username = ?) OR (username = ? AND friend_username = ?)",
+            (username, friend_username, friend_username, username)
+        )
+        messages = [{"username": row["username"], "message": row["message"]} for row in cursor.fetchall()]
+        return jsonify({"success": True, "messages": messages})
 
 @app.route("/api/reset", methods=["POST"])
 def reset_account():
-    return jsonify({"success": True})
+    data = request.get_json(silent=True) or {}
+    username = data.get("username")
+    if username:
+        db = get_db()
+        db.execute("DELETE FROM users WHERE username = ?", (username,))
+        db.execute("DELETE FROM messages WHERE username = ? OR friend_username = ?", (username, username))
+        db.execute("DELETE FROM friends WHERE username = ? OR friend_username = ?", (username, username))
+        db.commit()
+        return jsonify({"success": True})
+    return jsonify({"success": False})
 
 if __name__ == "__main__":
     app.run(debug=True)
