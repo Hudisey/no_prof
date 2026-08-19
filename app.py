@@ -1,4 +1,3 @@
-import os
 import sqlite3
 from flask import Flask, g, jsonify, render_template, request
 
@@ -18,20 +17,19 @@ def close_connection(exception):
     if db is not None:
         db.close()
 
+# Veritabanını uygulama ilk ayağa kalktığında bir kez güvenli şekilde oluşturuyoruz
 def init_db():
-    db = get_db()
-    db.execute("""CREATE TABLE IF NOT EXISTS users 
-                  (username TEXT PRIMARY KEY)""")
-    db.execute("""CREATE TABLE IF NOT EXISTS messages 
-                  (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, message TEXT)""")
-    db.execute("""CREATE TABLE IF NOT EXISTS friends 
-                  (username TEXT, friend_username TEXT)""")
-    db.commit()
+    with app.app_context():
+        db = get_db()
+        db.execute("""CREATE TABLE IF NOT EXISTS users 
+                      (username TEXT PRIMARY KEY)""")
+        db.execute("""CREATE TABLE IF NOT EXISTS messages 
+                      (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, message TEXT)""")
+        db.execute("""CREATE TABLE IF NOT EXISTS friends 
+                      (username TEXT, friend_username TEXT)""")
+        db.commit()
 
-# Her istekten önce veritabanı tablolarının olduğundan emin oluyoruz (Yoksa otomatik kurar)
-@app.before_request
-def before_request():
-    init_db()
+init_db()
 
 @app.route("/")
 def index():
@@ -39,21 +37,24 @@ def index():
 
 @app.route("/api/login", methods=["POST"])
 def login():
-    data = request.json or {}
-    username = data.get("username", "").strip()
-    if not username:
-        return jsonify({"success": False, "error": "Kullanıcı adı boş olamaz!"})
+    try:
+        data = request.get_json(silent=True) or {}
+        username = data.get("username", "").strip()
+        if not username:
+            return jsonify({"success": False, "error": "Kullanıcı adı boş olamaz!"})
 
-    db = get_db()
-    db.execute("INSERT OR IGNORE INTO users (username) VALUES (?)", (username,))
-    db.commit()
-    return jsonify({"success": True, "username": username})
+        db = get_db()
+        db.execute("INSERT OR IGNORE INTO users (username) VALUES (?)", (username,))
+        db.commit()
+        return jsonify({"success": True, "username": username})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route("/api/messages", methods=["GET", "POST"])
 def handle_messages():
     db = get_db()
     if request.method == "POST":
-        data = request.json or {}
+        data = request.get_json(silent=True) or {}
         username = data.get("username")
         message = data.get("message")
         if username and message:
@@ -76,7 +77,7 @@ def handle_messages():
 def handle_friends():
     db = get_db()
     if request.method == "POST":
-        data = request.json or {}
+        data = request.get_json(silent=True) or {}
         username = data.get("username")
         friend_username = data.get("friend_username")
 
@@ -102,7 +103,7 @@ def handle_friends():
 
 @app.route("/api/reset", methods=["POST"])
 def reset_account():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     username = data.get("username")
     if username:
         db = get_db()
