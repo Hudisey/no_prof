@@ -63,31 +63,38 @@ def update_avatar():
         return jsonify({"success": True})
     return jsonify({"success": False})
 
-@app.route("/api/friend-request", methods=["POST", "GET"])
-def handle_friend_requests():
-    db = get_db()
-    if request.method == "POST":
-        data = request.get_json(silent=True) or {}
-        username = data.get("username")
-        friend_username = data.get("friend_username", "").strip()
-
-        if not friend_username or username == friend_username:
-            return jsonify({"success": False, "error": "Geçersiz kullanıcı adı!"})
-
-        user_check = db.execute("SELECT * FROM users WHERE username = ?", (friend_username,)).fetchone()
-        if not user_check:
-            return jsonify({"success": False, "error": "Böyle bir kullanıcı yok!"})
-
-        existing = db.execute("""SELECT * FROM friendships 
-                                 WHERE (username = ? AND friend_username = ?) 
-                                 OR (username = ? AND friend_username = ?)""", 
-                              (username, friend_username, friend_username, username)).fetchone()
-        if existing:
-            return jsonify({"success": False, "error": "Zaten istek atılmış veya arkadaşsınız!"})
-
-        db.execute("INSERT INTO friendships (username, friend_username, status) VALUES (?, ?, ?)", (username, friend_username, 'pending'))
-        db.commit()
-        return jsonify({"success": True})
+@app.route('/api/friend-request', methods=['GET', 'POST'])
+def friend_request():
+    # İstekleri listeleme (GET)
+    if request.method == 'GET':
+        username = request.args.get('username')
+        # Eğer kullanıcı veritabanımızda yoksa boş liste döndür ki site patlamasın
+        user_data = users_db.get(username, {"pending": []})
+        return jsonify({"pending": user_data.get("pending", [])})
+    
+    # Arkadaşlık isteği gönderme (POST)
+    data = request.json
+    sender = data.get('username')
+    receiver = data.get('friend_username')
+    
+    # Gönderen ve alıcı aynı mı veya veritabanında var mı kontrolü
+    if not receiver or receiver not in users_db:
+        return jsonify({"success": False, "error": "Kullanıcı bulunamadı!"}), 400
+        
+    if sender == receiver:
+        return jsonify({"success": False, "error": "Kendine istek atamazsın!"}), 400
+        
+    # Alıcının pending (gelen istekler) listesine göndereni ekle
+    if "pending" not in users_db[receiver]:
+        users_db[receiver]["pending"] = []
+        
+    # Daha önce eklenmiş mi kontrol et
+    existing_senders = [p["username"] for p in users_db[receiver]["pending"]]
+    if sender in existing_senders:
+        return jsonify({"success": False, "error": "Zaten istek atılmış!"}), 400
+        
+    users_db[receiver]["pending"].append({"username": sender})
+    return jsonify({"success": True})
     else:
         username = request.args.get("username")
         
