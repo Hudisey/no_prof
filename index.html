@@ -10,6 +10,7 @@
             --border: #1a1a1a;
             --text: #ededed;
             --text-dim: #737373;
+            --accent: #262626;
         }
         [data-theme="light"] {
             --bg: #f4f4f5;
@@ -17,36 +18,50 @@
             --border: #e4e4e7;
             --text: #09090b;
             --text-dim: #71717a;
+            --accent: #e4e4e7;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: monospace; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
+        body { font-family: monospace; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; transition: background 0.3s, color 0.3s; }
         .hidden { display: none !important; }
 
         #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; height: 100%; gap: 15px; }
-        input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 12px; border-radius: 4px; outline: none; font-family: monospace; width: 240px; text-align: center; }
-        button { background: var(--text); color: var(--bg); border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; font-family: monospace; }
-        button:hover { opacity: 0.8; }
+        input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 12px 16px; border-radius: 20px; outline: none; font-family: monospace; width: 260px; text-align: center; transition: all 0.2s; }
+        input:focus { border-color: var(--text-dim); }
+
+        /* Smooth Baloncuk Butonlar */
+        button { background: var(--text); color: var(--bg); border: none; padding: 10px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; font-family: monospace; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        button:hover { transform: translateY(-2px); opacity: 0.9; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        button:active { transform: translateY(0); }
 
         .top-controls { position: absolute; top: 20px; right: 20px; display: flex; gap: 8px; z-index: 10; }
-        .control-btn { cursor: pointer; font-size: 16px; background: var(--surface); border: 1px solid var(--border); padding: 6px 10px; border-radius: 4px; }
+        .control-btn { cursor: pointer; font-size: 16px; background: var(--surface); border: 1px solid var(--border); padding: 8px 12px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .control-btn:hover { background: var(--accent); transform: scale(1.05); }
 
         #app-screen { display: flex; width: 100%; height: 100%; position: relative; }
-        .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 15px; gap: 15px; }
+        .sidebar { width: 240px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 15px; gap: 15px; }
         .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
         
-        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-        .message { background: var(--surface); border: 1px solid var(--border); padding: 10px; border-radius: 4px; max-width: 60%; word-break: break-all; font-size: 13px; }
-        .message b { color: var(--text-dim); margin-right: 8px; }
+        #chat-box { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; justify-content: flex-start; }
+        .message { background: var(--surface); border: 1px solid var(--border); padding: 12px 16px; border-radius: 12px; max-width: 65%; word-break: break-all; font-size: 13px; text-align: left; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .message b { color: var(--text-dim); margin-right: 8px; display: inline-block; }
 
-        .input-box { display: flex; padding: 15px; background: var(--surface); border-top: 1px solid var(--border); gap: 10px; }
-        .input-box input { flex: 1; text-align: left; }
+        .input-box { display: flex; padding: 15px 25px; background: var(--surface); border-top: 1px solid var(--border); gap: 12px; align-items: center; }
+        .input-box input { flex: 1; text-align: left; border-radius: 12px; }
 
-        .friend-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 5px; }
-        .friend-item { font-size: 13px; color: var(--text-dim); padding: 6px 8px; border-radius: 4px; cursor: pointer; }
-        .friend-item:hover, .friend-item.active { background: var(--border); color: var(--text); }
+        .friend-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+        .friend-item { font-size: 13px; color: var(--text-dim); padding: 10px 14px; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+        .friend-item:hover { background: var(--accent); color: var(--text); }
+        .friend-item.active { background: var(--text); color: var(--bg); font-weight: bold; }
 
-        .settings-area { margin-top: auto; }
-        .danger-btn { background: transparent; border: 1px solid #330000; color: #ff4444; width: 100%; padding: 8px; }
+        /* Sol Alt Ayarlar Bölümü */
+        .settings-area { margin-top: auto; display: flex; align-items: center; position: relative; padding-top: 10px; border-top: 1px solid var(--border); }
+        .settings-btn { background: transparent; border: 1px solid var(--border); color: var(--text); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: all 0.2s; box-shadow: none; padding: 0; }
+        .settings-btn:hover { background: var(--accent); transform: rotate(45deg); }
+
+        /* Ayarlar Menü Balonu */
+        .settings-menu { position: absolute; bottom: 55px; left: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; width: 200px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 100; }
+        .danger-btn { background: rgba(255, 68, 68, 0.1); border: 1px solid rgba(255, 68, 68, 0.3); color: #ff4444; width: 100%; padding: 8px; border-radius: 8px; font-size: 12px; text-align: center; }
+        .danger-btn:hover { background: #ff4444; color: #fff; }
     </style>
 </head>
 <body data-theme="dark">
@@ -64,20 +79,26 @@
 
     <div id="app-screen" class="hidden">
         <div class="sidebar">
-            <h3 id="txt-friends-title" style="font-size: 12px; color: var(--text-dim);">ARKADAŞLAR</h3>
-            <div style="display: flex; gap: 5px;">
-                <input type="text" id="friend-input" placeholder="ekle..." style="width: 100%; padding: 8px; font-size: 12px;">
-                <button onclick="addFriend()" style="padding: 8px 12px; font-size: 12px;">+</button>
+            <h3 id="txt-friends-title" style="font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">ARKADAŞLAR</h3>
+            <div style="display: flex; gap: 6px;">
+                <input type="text" id="friend-input" placeholder="ekle..." style="width: 100%; padding: 8px 12px; font-size: 12px; border-radius: 12px;">
+                <button onclick="addFriend()" style="padding: 8px 14px; font-size: 14px; border-radius: 12px;">+</button>
             </div>
             <div class="friend-list" id="friend-box"></div>
 
             <div class="settings-area">
-                <button class="danger-btn" id="txt-reset-btn" onclick="resetAccount()">HESABI SİL</button>
+                <div class="settings-btn" onclick="toggleSettingsMenu(event)">⚙️</div>
+                <!-- Ayarlar Pop-up Menüsü -->
+                <div class="settings-menu hidden" id="settings-menu">
+                    <button class="danger-btn" id="txt-reset-btn" onclick="resetAccount()">HESABI SİL</button>
+                </div>
             </div>
         </div>
 
         <div class="chat-area">
-            <div id="chat-box" style="display: flex; align-items: center; justify-content: center; color: var(--text-dim);">Bir arkadaş seç ve sohbet etmeye başla.</div>
+            <div id="chat-box">
+                <div style="color: var(--text-dim); margin: auto;">Bir arkadaş seç ve sohbet etmeye başla.</div>
+            </div>
             <div class="input-box hidden" id="msg-container">
                 <input type="text" id="msg-input" placeholder="mesaj yaz..." onkeypress="if(event.key === 'Enter') sendMessage()">
                 <button id="txt-send-btn" onclick="sendMessage()">GÖNDER</button>
@@ -108,6 +129,20 @@
             document.body.setAttribute('data-theme', currentTheme);
             document.getElementById('theme-btn').innerText = currentTheme === 'dark' ? '🌙' : '☀️';
         }
+
+        function toggleSettingsMenu(e) {
+            e.stopPropagation();
+            const menu = document.getElementById('settings-menu');
+            menu.classList.toggle('hidden');
+        }
+
+        // Menü açıkken dışarı tıklanırsa kapatma
+        window.addEventListener('click', () => {
+            const menu = document.getElementById('settings-menu');
+            if(menu && !menu.classList.contains('hidden')) {
+                menu.classList.add('hidden');
+            }
+        });
 
         function updateTexts() {
             const t = texts[currentLang];
@@ -148,13 +183,12 @@
             setInterval(loadFriends, 4000);
         }
 
-        function selectChat(username) {
+        function selectChat(username, event) {
             activeChat = username;
             document.getElementById('msg-container').classList.remove('hidden');
             
-            // Aktif sınıfını güncelle
             document.querySelectorAll('.friend-item').forEach(el => el.classList.remove('active'));
-            event.target.classList.add('active');
+            if(event) event.currentTarget.classList.add('active');
 
             loadMessages();
             if(messageInterval) clearInterval(messageInterval);
@@ -184,7 +218,7 @@
                 if(data.success) {
                     const box = document.getElementById('chat-box');
                     if(data.messages.length === 0) {
-                        box.innerHTML = `<div style="color: var(--text-dim); text-align:center;">Henüz mesaj yok. İlk mesajı sen yaz!</div>`;
+                        box.innerHTML = `<div style="color: var(--text-dim); margin: auto;">Henüz mesaj yok. İlk mesajı sen yaz!</div>`;
                         return;
                     }
                     box.innerHTML = data.messages.map(m => `<div class="message"><b>${m.username}:</b> ${m.message}</div>`).join('');
@@ -220,10 +254,10 @@
                 if(data.success) {
                     const box = document.getElementById('friend-box');
                     if(data.friends.length === 0) {
-                        box.innerHTML = `<div style="font-size:12px; color:var(--text-dim);">Henüz arkadaş yok.</div>`;
+                        box.innerHTML = `<div style="font-size:12px; color:var(--text-dim); padding: 5px;">Henüz arkadaş yok.</div>`;
                         return;
                     }
-                    box.innerHTML = data.friends.map(f => `<div class="friend-item ${activeChat === f ? 'active' : ''}" onclick="selectChat('${f}')">@${f}</div>`).join('');
+                    box.innerHTML = data.friends.map(f => `<div class="friend-item ${activeChat === f ? 'active' : ''}" onclick="selectChat('${f}', event)">@${f}</div>`).join('');
                 }
             });
         }
