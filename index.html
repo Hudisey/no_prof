@@ -59,8 +59,12 @@
         .friend-item.active { background: var(--text); color: var(--bg); font-weight: bold; }
         .friend-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: var(--border); flex-shrink: 0; }
 
-        /* Discord Tarzı Kırmızı Daire Bildirim Rozeti */
-        .discord-badge { background: #ed4245; color: white; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-left: auto; font-weight: bold; }
+        /* Discord Tarzı Kırmızı Daire Bildirim Rozeti & Zil */
+        .bell-container { position: relative; display: inline-block; }
+        .discord-badge { background: #ed4245; color: white; font-size: 10px; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: absolute; top: -4px; right: -4px; font-weight: bold; }
+
+        /* İstekler Açılır Kutusu */
+        .requests-dropdown { position: absolute; top: 125px; left: 15px; width: 250px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 200; display: flex; flex-direction: column; gap: 8px; }
 
         .settings-area { margin-top: auto; display: flex; align-items: center; position: relative; padding-top: 10px; border-top: 1px solid var(--border); }
         .settings-btn { background: transparent; border: 1px solid var(--border); color: var(--text); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: all 0.2s; padding: 0; }
@@ -93,9 +97,22 @@
                 <h3 style="font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">SOHBETLER</h3>
                 <button onclick="openGroupModal()" style="padding: 4px 8px; font-size: 11px; border-radius: 8px;">Grup Kur</button>
             </div>
-            <div style="display: flex; gap: 6px;">
-                <input type="text" id="friend-input" placeholder="arkadaş ekle..." style="width: 100%; padding: 8px 12px; font-size: 12px; border-radius: 12px;">
-                <button onclick="sendFriendRequest()" style="padding: 8px 14px; font-size: 14px; border-radius: 12px;">+</button>
+            
+            <!-- Arkadaş Ekleme ve Zil Alanı -->
+            <div style="display: flex; gap: 6px; align-items: center;">
+                <input type="text" id="friend-input" placeholder="arkadaş ekle..." style="width: 140px; padding: 8px 10px; font-size: 12px; border-radius: 12px;">
+                <button onclick="sendFriendRequest()" style="padding: 8px 12px; font-size: 14px; border-radius: 12px;" title="Arkadaş Ekle">+</button>
+                
+                <div class="bell-container">
+                    <button onclick="toggleRequestsMenu(event)" style="padding: 8px 12px; font-size: 14px; border-radius: 12px; background: var(--accent); color: var(--text); border: 1px solid var(--border);" title="İstekler">🔔</button>
+                    <span id="req-badge" class="discord-badge hidden">0</span>
+                </div>
+            </div>
+
+            <!-- Gelen İstekler Açılır Menüsü -->
+            <div id="requests-dropdown" class="requests-dropdown hidden" onclick="event.stopPropagation()">
+                <div style="font-size: 11px; color: var(--text-dim); font-weight: bold; margin-bottom: 4px;">GELEN İSTEKLER</div>
+                <div id="requests-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto;"></div>
             </div>
             
             <div class="friend-list" id="friend-box"></div>
@@ -136,11 +153,20 @@
         function toggleSettingsMenu(e) {
             e.stopPropagation();
             document.getElementById('settings-menu').classList.toggle('hidden');
+            document.getElementById('requests-dropdown').classList.add('hidden');
+        }
+
+        function toggleRequestsMenu(e) {
+            e.stopPropagation();
+            document.getElementById('requests-dropdown').classList.toggle('hidden');
+            document.getElementById('settings-menu').classList.add('hidden');
         }
 
         window.addEventListener('click', () => {
-            const menu = document.getElementById('settings-menu');
-            if(menu) menu.classList.add('hidden');
+            const settingsMenu = document.getElementById('settings-menu');
+            const reqDropdown = document.getElementById('requests-dropdown');
+            if(settingsMenu) settingsMenu.classList.add('hidden');
+            if(reqDropdown) reqDropdown.classList.add('hidden');
         });
 
         if(currentUser) { showApp(); }
@@ -297,36 +323,41 @@
                 fetch(`/api/friend-request?username=${currentUser}`).then(r => r.json()),
                 fetch(`/api/groups?username=${currentUser}`).then(r => r.json())
             ]).then(([friendData, groupData]) => {
-                const box = document.getElementById('friend-box');
-                let html = '';
+                const badge = document.getElementById('req-badge');
+                const reqList = document.getElementById('requests-list');
 
-                // Gelen İstekler & Kırmızı Daire Rozet
+                // Zil Üstündeki Kırmızı Rozet Yönetimi
                 if(friendData.pending && friendData.pending.length > 0) {
-                    html += `
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
-                            <span style="font-size: 11px; color: #ed4245; font-weight: bold;">GELEN İSTEKLER</span>
-                            <span class="discord-badge">${friendData.pending.length}</span>
-                        </div>
-                    `;
+                    badge.classList.remove('hidden');
+                    badge.innerText = friendData.pending.length;
+                    
+                    let reqHtml = '';
                     friendData.pending.forEach(p => {
-                        html += `
-                            <div class="friend-item" style="justify-content: space-between;">
+                        reqHtml += `
+                            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 6px 10px; border-radius: 8px;">
                                 <div style="display:flex; align-items:center; gap:8px;">
-                                    <img src="${p.avatar || 'https://api.dicebear.com/7.x/identicon/svg?seed=' + p.username}" class="friend-avatar">
-                                    <span>${p.username}</span>
+                                    <img src="${p.avatar || 'https://api.dicebear.com/7.x/identicon/svg?seed=' + p.username}" class="friend-avatar" style="width:26px; height:26px;">
+                                    <span style="font-size:12px; color:var(--text);">${p.username}</span>
                                 </div>
                                 <div style="display:flex; gap:4px;">
-                                    <button onclick="respondRequest('${p.username}', 'accept')" style="padding:4px 8px; font-size:10px; border-radius:6px;">✓</button>
-                                    <button onclick="respondRequest('${p.username}', 'reject')" style="padding:4px 8px; font-size:10px; border-radius:6px; background:#ed4245; color:white;">✕</button>
+                                    <button onclick="respondRequest('${p.username}', 'accept')" style="padding:3px 6px; font-size:10px; border-radius:4px;">✓</button>
+                                    <button onclick="respondRequest('${p.username}', 'reject')" style="padding:3px 6px; font-size:10px; border-radius:4px; background:#ed4245; color:white;">✕</button>
                                 </div>
                             </div>
                         `;
                     });
+                    reqList.innerHTML = reqHtml;
+                } else {
+                    badge.classList.add('hidden');
+                    reqList.innerHTML = `<div style="font-size: 11px; color: var(--text-dim); text-align: center; padding: 10px;">Bekleyen istek yok.</div>`;
                 }
+
+                const box = document.getElementById('friend-box');
+                let html = '';
 
                 // Gruplar Listesi
                 if(groupData.groups && groupData.groups.length > 0) {
-                    html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">GRUPLAR</div>`;
+                    html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 5px;">GRUPLAR</div>`;
                     groupData.groups.forEach(g => {
                         html += `
                             <div class="friend-item ${activeChat === g.group_name && isGroupChat === 1 ? 'active' : ''}" onclick="selectChat('${g.group_name}', 1, event)">
