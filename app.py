@@ -78,7 +78,9 @@ def handle_friend_requests():
         if not user_check:
             return jsonify({"success": False, "error": "Böyle bir kullanıcı yok!"})
 
-        existing = db.execute("SELECT * FROM friendships WHERE (username = ? AND friend_username = ?) OR (username = ? AND friend_username = ?)", 
+        existing = db.execute("""SELECT * FROM friendships 
+                                 WHERE (username = ? AND friend_username = ?) 
+                                 OR (username = ? AND friend_username = ?)""", 
                               (username, friend_username, friend_username, username)).fetchone()
         if existing:
             return jsonify({"success": False, "error": "Zaten istek atılmış veya arkadaşsınız!"})
@@ -88,6 +90,7 @@ def handle_friend_requests():
         return jsonify({"success": True})
     else:
         username = request.args.get("username")
+        
         # Gelen pending istekler (Bana kim istek atmış)
         pending = db.execute("""
             SELECT f.username, u.avatar 
@@ -96,7 +99,7 @@ def handle_friend_requests():
             WHERE f.friend_username = ? AND f.status = 'pending'
         """, (username,)).fetchall()
         
-        # Karşılıklı kabul edilen arkadaşlar
+        # Karşılıklı kabul edilen arkadaşlar (Her iki yönü de kapsar)
         friends_cursor = db.execute("""
             SELECT CASE WHEN username = ? THEN friend_username ELSE username END as fname, u.avatar 
             FROM friendships f 
@@ -124,9 +127,16 @@ def friend_action():
 
     db = get_db()
     if action == "accept":
-        db.execute("UPDATE friendships SET status = 'accepted' WHERE username = ? AND friend_username = ?", (friend_username, username))
+        # İstek hangi yönde atılmış olursa olsun 'accepted' yapıyoruz
+        db.execute("""UPDATE friendships SET status = 'accepted' 
+                      WHERE (username = ? AND friend_username = ?) 
+                      OR (username = ? AND friend_username = ?)""", 
+                   (friend_username, username, username, friend_username))
     else:
-        db.execute("DELETE FROM friendships WHERE username = ? AND friend_username = ?", (friend_username, username))
+        db.execute("""DELETE FROM friendships 
+                      WHERE (username = ? AND friend_username = ?) 
+                      OR (username = ? AND friend_username = ?)""", 
+                   (friend_username, username, username, friend_username))
     db.commit()
     return jsonify({"success": True})
 
