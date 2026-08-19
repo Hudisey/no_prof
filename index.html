@@ -11,7 +11,6 @@
             --text: #ededed;
             --text-dim: #737373;
         }
-
         [data-theme="light"] {
             --bg: #f4f4f5;
             --surface: #ffffff;
@@ -19,23 +18,18 @@
             --text: #09090b;
             --text-dim: #71717a;
         }
-
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: monospace; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; transition: background 0.2s, color 0.2s; }
+        body { font-family: monospace; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
         .hidden { display: none !important; }
 
-        /* Giriş Ekranı */
         #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; height: 100%; gap: 15px; }
         input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 12px; border-radius: 4px; outline: none; font-family: monospace; width: 240px; text-align: center; }
-        input:focus { border-color: var(--text-dim); }
         button { background: var(--text); color: var(--bg); border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; font-family: monospace; }
         button:hover { opacity: 0.8; }
 
-        /* Sağ Üst Araçlar (Dil ve Tema) */
-        .top-controls { position: absolute; top: 20px; right: 20px; display: flex; gap: 8px; }
-        .control-btn { cursor: pointer; font-size: 16px; user-select: none; background: var(--surface); border: 1px solid var(--border); padding: 6px 10px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+        .top-controls { position: absolute; top: 20px; right: 20px; display: flex; gap: 8px; z-index: 10; }
+        .control-btn { cursor: pointer; font-size: 16px; background: var(--surface); border: 1px solid var(--border); padding: 6px 10px; border-radius: 4px; }
 
-        /* Ana Uygulama */
         #app-screen { display: flex; width: 100%; height: 100%; position: relative; }
         .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 15px; gap: 15px; }
         .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
@@ -49,29 +43,25 @@
 
         .friend-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 5px; }
         .friend-item { font-size: 13px; color: var(--text-dim); padding: 6px 8px; border-radius: 4px; cursor: pointer; }
-        .friend-item:hover { background: var(--border); color: var(--text); }
+        .friend-item:hover, .friend-item.active { background: var(--border); color: var(--text); }
 
         .settings-area { margin-top: auto; }
         .danger-btn { background: transparent; border: 1px solid #330000; color: #ff4444; width: 100%; padding: 8px; }
-        .danger-btn:hover { background: #1a0000; }
     </style>
 </head>
 <body data-theme="dark">
 
-    <!-- Sağ Üst Kontroller -->
     <div class="top-controls">
         <div class="control-btn" id="theme-btn" onclick="toggleTheme()">🌙</div>
         <div class="control-btn" id="lang-btn" onclick="toggleLang()">🇹🇷</div>
     </div>
 
-    <!-- GİRİŞ EKRANI -->
     <div id="login-screen">
         <h2 id="txt-title" style="letter-spacing: 2px;">NOPROF</h2>
         <input type="text" id="username-input" placeholder="kullanıcı adı...">
         <button id="txt-login-btn" onclick="login()">GİRİŞ</button>
     </div>
 
-    <!-- ANA EKRAN -->
     <div id="app-screen" class="hidden">
         <div class="sidebar">
             <h3 id="txt-friends-title" style="font-size: 12px; color: var(--text-dim);">ARKADAŞLAR</h3>
@@ -87,8 +77,7 @@
         </div>
 
         <div class="chat-area">
-            <div id="chat-box"></div>
-            <!-- Kimse seçili değilse mesaj yazma alanı tamamen gizlenir -->
+            <div id="chat-box" style="display: flex; align-items: center; justify-content: center; color: var(--text-dim);">Bir arkadaş seç ve sohbet etmeye başla.</div>
             <div class="input-box hidden" id="msg-container">
                 <input type="text" id="msg-input" placeholder="mesaj yaz..." onkeypress="if(event.key === 'Enter') sendMessage()">
                 <button id="txt-send-btn" onclick="sendMessage()">GÖNDER</button>
@@ -100,7 +89,8 @@
         let currentUser = localStorage.getItem('noprof_user');
         let currentLang = 'tr';
         let currentTheme = 'dark';
-        let activeChat = null; // Seçili arkadaş / sohbet
+        let activeChat = null;
+        let messageInterval = null;
 
         const texts = {
             tr: { loginBtn: "GİRİŞ", usernamePlaceholder: "kullanıcı adı...", friendsTitle: "ARKADAŞLAR", friendPlaceholder: "ekle...", resetBtn: "HESABI SİL", sendBtn: "GÖNDER", msgPlaceholder: "mesaj yaz..." },
@@ -154,39 +144,50 @@
         function showApp() {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
-            loadMessages();
             loadFriends();
-            setInterval(loadMessages, 3000);
+            setInterval(loadFriends, 4000);
         }
 
         function selectChat(username) {
             activeChat = username;
             document.getElementById('msg-container').classList.remove('hidden');
+            
+            // Aktif sınıfını güncelle
+            document.querySelectorAll('.friend-item').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+
             loadMessages();
+            if(messageInterval) clearInterval(messageInterval);
+            messageInterval = setInterval(loadMessages, 2000);
         }
 
         function sendMessage() {
             const message = document.getElementById('msg-input').value.trim();
-            if(!message) return;
+            if(!message || !activeChat) return;
 
             document.getElementById('msg-input').value = '';
 
             fetch('/api/messages', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: currentUser, message})
+                body: JSON.stringify({username: currentUser, friend_username: activeChat, message})
             }).then(() => {
                 loadMessages();
             });
         }
 
         function loadMessages() {
-            fetch('/api/messages')
+            if(!activeChat) return;
+            fetch(`/api/messages?username=${currentUser}&friend_username=${activeChat}`)
             .then(res => res.json())
             .then(data => {
                 if(data.success) {
                     const box = document.getElementById('chat-box');
-                    box.innerHTML = data.messages.map(m => `<div class="message"><b>${m.username}</b>${m.message}</div>`).join('');
+                    if(data.messages.length === 0) {
+                        box.innerHTML = `<div style="color: var(--text-dim); text-align:center;">Henüz mesaj yok. İlk mesajı sen yaz!</div>`;
+                        return;
+                    }
+                    box.innerHTML = data.messages.map(m => `<div class="message"><b>${m.username}:</b> ${m.message}</div>`).join('');
                     box.scrollTop = box.scrollHeight;
                 }
             });
@@ -207,7 +208,7 @@
                     document.getElementById('friend-input').value = '';
                     loadFriends();
                 } else {
-                    alert(data.error);
+                    alert(data.error || "Kullanıcı eklenemedi.");
                 }
             });
         }
@@ -218,7 +219,11 @@
             .then(data => {
                 if(data.success) {
                     const box = document.getElementById('friend-box');
-                    box.innerHTML = data.friends.map(f => `<div class="friend-item" onclick="selectChat('${f}')">@${f}</div>`).join('');
+                    if(data.friends.length === 0) {
+                        box.innerHTML = `<div style="font-size:12px; color:var(--text-dim);">Henüz arkadaş yok.</div>`;
+                        return;
+                    }
+                    box.innerHTML = data.friends.map(f => `<div class="friend-item ${activeChat === f ? 'active' : ''}" onclick="selectChat('${f}')">@${f}</div>`).join('');
                 }
             });
         }
