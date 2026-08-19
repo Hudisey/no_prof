@@ -60,9 +60,6 @@
         .friend-item.active { background: var(--text); color: var(--bg); font-weight: bold; }
         .friend-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: var(--border); flex-shrink: 0; }
 
-        /* Discord Tarzı Kırmızı Daire Bildirim Rozeti */
-        .discord-badge { background: #ed4245; color: white; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-left: auto; font-weight: bold; }
-
         .settings-area { margin-top: auto; display: flex; align-items: center; position: relative; padding-top: 10px; border-top: 1px solid var(--border); }
         .settings-btn { background: transparent; border: 1px solid var(--border); color: var(--text); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: all 0.2s; padding: 0; }
         .settings-btn:hover { background: var(--accent); transform: rotate(45deg); }
@@ -96,8 +93,8 @@
                 <button onclick="openGroupModal()" style="padding: 4px 8px; font-size: 11px; border-radius: 8px;">Grup Kur</button>
             </div>
             <div style="display: flex; gap: 6px;">
-                <input type="text" id="friend-input" placeholder="arkadaş ekle..." style="width: 100%; padding: 8px 12px; font-size: 12px; border-radius: 12px;">
-                <button onclick="sendFriendRequest()" style="padding: 8px 14px; font-size: 14px; border-radius: 12px;">+</button>
+                <input type="text" id="friend-input" placeholder="kullanıcı ekle..." style="width: 100%; padding: 8px 12px; font-size: 12px; border-radius: 12px;">
+                <button onclick="addFriend()" style="padding: 8px 14px; font-size: 14px; border-radius: 12px;">+</button>
             </div>
             
             <div class="friend-list" id="friend-box"></div>
@@ -247,11 +244,11 @@
             });
         }
 
-        function sendFriendRequest() {
+        function addFriend() {
             const friend_username = document.getElementById('friend-input').value.trim();
             if(!friend_username) return;
 
-            fetch('/api/friend-request', {
+            fetch('/api/friends', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username: currentUser, friend_username})
@@ -260,20 +257,11 @@
             .then(data => {
                 if(data.success) {
                     document.getElementById('friend-input').value = '';
-                    alert("Arkadaşlık isteği gönderildi!");
                     loadSidebar();
                 } else {
                     alert(data.error);
                 }
             });
-        }
-
-        function respondRequest(friend_username, action) {
-            fetch('/api/friend-action', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: currentUser, friend_username, action})
-            }).then(() => loadSidebar());
         }
 
         function openGroupModal() {
@@ -296,39 +284,15 @@
 
         function loadSidebar() {
             Promise.all([
-                fetch(`/api/friend-request?username=${currentUser}`).then(r => r.json()),
+                fetch(`/api/friends?username=${currentUser}`).then(r => r.json()),
                 fetch(`/api/groups?username=${currentUser}`).then(r => r.json())
             ]).then(([friendData, groupData]) => {
                 const box = document.getElementById('friend-box');
                 let html = '';
 
-                // Gelen İstekler & Discord Tarzı Kırmızı Daire Rozet
-                if(friendData.pending && friendData.pending.length > 0) {
-                    html += `
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
-                            <span style="font-size: 11px; color: #ed4245; font-weight: bold;">GELEN İSTEKLER</span>
-                            <span class="discord-badge">${friendData.pending.length}</span>
-                        </div>
-                    `;
-                    friendData.pending.forEach(p => {
-                        html += `
-                            <div class="friend-item" style="justify-content: space-between;">
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <img src="${p.avatar || 'https://api.dicebear.com/7.x/identicon/svg?seed=' + p.username}" class="friend-avatar">
-                                    <span>${p.username}</span>
-                                </div>
-                                <div style="display:flex; gap:4px;">
-                                    <button onclick="respondRequest('${p.username}', 'accept')" style="padding:4px 8px; font-size:10px; border-radius:6px;">✓</button>
-                                    <button onclick="respondRequest('${p.username}', 'reject')" style="padding:4px 8px; font-size:10px; border-radius:6px; background:#ed4245; color:white;">✕</button>
-                                </div>
-                            </div>
-                        `;
-                    });
-                }
-
                 // Gruplar Listesi
                 if(groupData.groups && groupData.groups.length > 0) {
-                    html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">GRUPLAR</div>`;
+                    html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 5px;">GRUPLAR</div>`;
                     groupData.groups.forEach(g => {
                         html += `
                             <div class="friend-item ${activeChat === g.group_name && isGroupChat === 1 ? 'active' : ''}" onclick="selectChat('${g.group_name}', 1, event)">
@@ -339,10 +303,10 @@
                     });
                 }
 
-                // Arkadaşlar Listesi
-                html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">ARKADAŞLAR</div>`;
+                // Arkadaşlar / Sohbetler Listesi
+                html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">KİŞİLER</div>`;
                 if(friendData.friends && friendData.friends.length > 0) {
-                    friendData.friends.forEach(f => {
+                    friendData.friends.graph = friendData.friends.forEach(f => {
                         html += `
                             <div class="friend-item ${activeChat === f.friend_username && isGroupChat === 0 ? 'active' : ''}" onclick="selectChat('${f.friend_username}', 0, event)">
                                 <img src="${f.avatar || 'https://api.dicebear.com/7.x/identicon/svg?seed=' + f.friend_username}" class="friend-avatar">
@@ -351,7 +315,7 @@
                         `;
                     });
                 } else {
-                    html += `<div style="font-size: 12px; color: var(--text-dim); padding: 5px;">Henüz arkadaş yok.</div>`;
+                    html += `<div style="font-size: 12px; color: var(--text-dim); padding: 5px;">Henüz eklenen kimse yok.</div>`;
                 }
 
                 box.innerHTML = html;
