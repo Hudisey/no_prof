@@ -8,7 +8,7 @@ DATABASE = "noprof.db"
 def get_db():
     db = getattr(g, "_database", None)
     if db is None:
-        db = g._database = sqlite3.connect(DATABASE)
+        db = getattr(g, "_database", sqlite3.connect(DATABASE))
         db.row_factory = sqlite3.Row
     return db
 
@@ -23,10 +23,13 @@ def init_db():
         db = get_db()
         db.execute("""CREATE TABLE IF NOT EXISTS users 
                       (username TEXT PRIMARY KEY, avatar TEXT)""")
+        # status: 'pending' (beklemede) veya 'accepted' (kabul edildi)
+        db.execute("""CREATE TABLE IF NOT EXISTS friendships 
+                      (username TEXT, friend_username TEXT, status TEXT)""")
         db.execute("""CREATE TABLE IF NOT EXISTS messages 
-                      (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, friend_username TEXT, message TEXT)""")
-        db.execute("""CREATE TABLE IF NOT EXISTS friends 
-                      (username TEXT, friend_username TEXT)""")
+                      (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, receiver TEXT, is_group INTEGER, message TEXT)""")
+        db.execute("""CREATE TABLE IF NOT EXISTS groups 
+                      (group_name TEXT, username TEXT)""")
         db.commit()
 
 init_db()
@@ -62,37 +65,81 @@ def update_avatar():
         return jsonify({"success": True})
     return jsonify({"success": False})
 
-@app.route("/api/friends", methods=["GET", "POST"])
-def handle_friends():
+@app.route("/api/friend-request", methods=["POST", "GET"])
+def handle_friend_requests():
     db = get_db()
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         username = data.get("username")
         friend_username = data.get("friend_username", "").strip()
 
-        if not friend_username:
-            return jsonify({"success": False, "error": "Boş olamaz"})
+        if not friend_username or username == friend_username:
+            return jsonify({"success": False, "error": "Geçersiz kullanıcı adı!"})
 
         user_check = db.execute("SELECT * FROM users WHERE username = ?", (friend_username,)).fetchone()
         if not user_check:
             return jsonify({"success": False, "error": "Böyle bir kullanıcı yok!"})
 
-        existing = db.execute("SELECT * FROM friends WHERE username = ? AND friend_username = ?", (username, friend_username)).fetchone()
-        if not existing:
-            db.execute("INSERT INTO friends (username, friend_username) VALUES (?, ?)", (username, friend_username))
-            db.commit()
+        existing = db.execute("SELECT * FROM friendships WHERE (username = ? AND friend_username = ?) OR (username = ? AND friend_username = ?)", 
+                              (username, friend_username, friend_username, username)).fetchone()
+        if existing:
+            return jsonify({"success": False, "error": "Zaten istek atılmış veya arkadaşsınız!"})
 
+        db.execute("INSERT INTO friendships (username, friend_username, status) VALUES (?, ?, ?)", (username, friend_username, 'pending'))
+        db.commit()
         return jsonify({"success": True})
     else:
         username = request.args.get("username")
-        cursor = db.execute("""
-            SELECT f.friend_username, u.avatar 
-            FROM friends f 
-            LEFT JOIN users u ON f.friend_username = u.username 
-            WHERE f.username = ?
-        """, (username,))
-        friends = [{"friend_username": row["friend_username"], "avatar": row["avatar"] or ""} for row in cursor.fetchall()]
-        return jsonify({"success": True, "friends": friends})
+        # Bana gelen bekleyen istekler
+        pending = db.execute("SELECT f.username, u.avatar FROM friendships f LEFT JOIN users u ON f.username = u.username WHERE f.friend_username = ? AND f.status = 'pending'", (username,)).fetchall()
+        # Kabul edilmiş arkadaşlar
+        friends = db.execute("""
+            SELECT CASE WHEN username = ? THEN friend_username ELSE username END as fname, u.avatar 
+            FROM friendships f 
+            LEFT JOIN users u ON u.username = CASE WHEN username = ? THEN friend_username ELSE username END
+            WHERE (username = ? OR friend_username = ?) AND status = 'accepted'
+        """, (username, username, username, username)).fetchall()
+
+        return jsonify({
+            "success": True, 
+            "pending": [{"username": r["username"], "avatar": r["avatar"]} for r in pending],
+            "friends": [{"friend_username": r["fname"], "avatar": r["avatar"]} for r in friends]
+        })
+
+@app.route("/api/friend-action", methods=["POST"])
+def friend_action():
+    data = request.get_json(silent=True) or {}
+    username = data.get("username")
+    friend_username = data.get("friend_username")
+    action = data.get("action") # accept veya reject
+
+    db = get_db()
+    if action == "accept":
+        db.execute("UPDATE friendships SET status = 'accepted' WHERE username = ? AND friend_username = ?", (friend_username, username))
+    else:
+        db.execute("DELETE FROM friendships WHERE username = ? AND friend_username = ?", (friend_username, username))
+    db.commit()
+    return jsonify({"success": True})
+
+@app.route("/api/groups", methods=["POST", "GET"])
+def handle_groups():
+    db = get_db()
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        group_name = data.get("group_name", "").strip()
+        members = data.get("members", []) # Liste
+        if not group_name:
+            return jsonify({"success": False, "error": "Grup adı boş olamaz!"})
+        
+        for m in members:
+            db.execute("INSERT INTO groups (group_name, username) VALUES (?, ?)", (group_name, m))
+        db.commit()
+        return jsonify({"success": True})
+    else:
+        username = request.args.get("username")
+        cursor = db.execute("SELECT DISTINCT group_name FROM groups WHERE username = ?", (username,))
+        groups = [{"group_name": row["group_name"]} for row in cursor.fetchall()]
+        return jsonify({"success": True, "groups": groups})
 
 @app.route("/api/messages", methods=["GET", "POST"])
 def handle_messages():
@@ -100,25 +147,37 @@ def handle_messages():
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         username = data.get("username")
-        friend_username = data.get("friend_username")
+        receiver = data.get("receiver") # arkadaş veya grup adı
+        is_group = data.get("is_group", 0)
         message = data.get("message")
         if username and message:
             db.execute(
-                "INSERT INTO messages (username, friend_username, message) VALUES (?, ?, ?)",
-                (username, friend_username, message),
+                "INSERT INTO messages (username, receiver, is_group, message) VALUES (?, ?, ?, ?)",
+                (username, receiver, is_group, message),
             )
             db.commit()
             return jsonify({"success": True})
         return jsonify({"success": False})
     else:
         username = request.args.get("username")
-        friend_username = request.args.get("friend_username")
-        cursor = db.execute("""
-            SELECT m.username, m.message, u.avatar 
-            FROM messages m 
-            LEFT JOIN users u ON m.username = u.username 
-            WHERE (m.username = ? AND m.friend_username = ?) OR (m.username = ? AND m.friend_username = ?)
-        """, (username, friend_username, friend_username, username))
+        receiver = request.args.get("receiver")
+        is_group = int(request.args.get("is_group", 0))
+
+        if is_group:
+            cursor = db.execute("""
+                SELECT m.username, m.message, u.avatar 
+                FROM messages m 
+                LEFT JOIN users u ON m.username = u.username 
+                WHERE m.receiver = ? AND m.is_group = 1
+            """, (receiver,))
+        else:
+            cursor = db.execute("""
+                SELECT m.username, m.message, u.avatar 
+                FROM messages m 
+                LEFT JOIN users u ON m.username = u.username 
+                WHERE (m.username = ? AND m.receiver = ?) OR (m.username = ? AND m.receiver = ?)
+            """, (username, receiver, receiver, username))
+
         messages = [{"username": row["username"], "message": row["message"], "avatar": row["avatar"]} for row in cursor.fetchall()]
         return jsonify({"success": True, "messages": messages})
 
@@ -129,8 +188,9 @@ def reset_account():
     if username:
         db = get_db()
         db.execute("DELETE FROM users WHERE username = ?", (username,))
-        db.execute("DELETE FROM messages WHERE username = ? OR friend_username = ?", (username, username))
-        db.execute("DELETE FROM friends WHERE username = ? OR friend_username = ?", (username, username))
+        db.execute("DELETE FROM messages WHERE username = ? OR receiver = ?", (username, username))
+        db.execute("DELETE FROM friendships WHERE username = ? OR friend_username = ?", (username, username))
+        db.execute("DELETE FROM groups WHERE username = ?", (username,))
         db.commit()
         return jsonify({"success": True})
     return jsonify({"success": False})
