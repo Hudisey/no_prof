@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify, render_template_string
 
 app = Flask(__name__)
 
-# Bellek içi veritabanı
 users_db = {}
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -22,7 +21,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         #app-screen { display: flex; width: 100%; height: 100%; }
         .sidebar { width: 300px; background: var(--surface); border-right: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 10px; position: relative; }
         .chat-main { flex: 1; display: flex; flex-direction: column; }
-        #chat-box { flex: 1; padding: 20px; overflow-y: auto; }
+        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; align-items: center; justify-content: center; color: #555; }
         .msg-input-area { padding: 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
         #requests-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
         .req-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
@@ -74,7 +73,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
         </div>
         <div class="chat-main">
-            <div id="chat-box" style="display: flex; align-items: center; justify-content: center; color: #555;">Bir sohbet seçin</div>
+            <div id="chat-box">Bir sohbet seçin</div>
             <div class="msg-input-area hidden" id="msg-area">
                 <input type="text" id="msg-input" style="flex:1" placeholder="Mesaj yaz...">
                 <button onclick="sendMessage()">GÖNDER</button>
@@ -94,11 +93,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username: usernameInput})
             }).then(r => r.json()).then(data => {
-                currentUser = data.username || usernameInput;
-                localStorage.setItem('noprof_user', currentUser);
-                document.getElementById('login-screen').classList.add('hidden');
-                document.getElementById('app-screen').classList.remove('hidden');
-                loadData();
+                if(data.success) {
+                    currentUser = data.username;
+                    localStorage.setItem('noprof_user', currentUser);
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('app-screen').classList.remove('hidden');
+                    loadData();
+                }
             });
         }
 
@@ -120,8 +121,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         
         async function sendFriendRequest() {
             const friend_username = document.getElementById('friend-input').value.trim();
-            if(!friend_username) return;
-            if(!currentUser) currentUser = localStorage.getItem('noprof_user');
+            if(!friend_username || !currentUser) return;
             
             const res = await fetch('/api/friend-request', {
                 method: 'POST',
@@ -148,7 +148,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         function openChat(username) {
             currentChat = username;
-            document.getElementById('chat-boxinnerHTML'] = '';
             document.getElementById('chat-box').innerHTML = `<div style="color:#888; font-size:13px;">${username} ile sohbet başlıyor...</div>`;
             document.getElementById('msg-area').classList.remove('hidden');
         }
@@ -177,13 +176,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         async function loadData() {
-            if(!currentUser) currentUser = localStorage.getItem('noprof_user');
             if(!currentUser) return;
             try {
                 const res = await fetch(`/api/user-data?username=${encodeURIComponent(currentUser)}`);
                 const data = await res.json();
                 
-                // İstekler
                 const reqList = document.getElementById('requests-list');
                 const badge = document.getElementById('req-badge');
                 if (data.pending && data.pending.length > 0) {
@@ -203,7 +200,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     reqList.innerHTML = `<div style="font-size:11px; color:#737373; text-align:center; padding: 6px;">${isTr ? 'İstek yok.' : 'No requests.'}</div>`;
                 }
 
-                // Arkadaşlar / Sohbetler
                 const friendBox = document.getElementById('friend-box');
                 if (data.friends && data.friends.length > 0) {
                     friendBox.innerHTML = data.friends.map(f => `
@@ -244,7 +240,7 @@ def login():
     data = request.json or {}
     username = data.get('username')
     if not username:
-        return jsonify({"success": False, "error": "Kullanıcı adı gerekli!"}), 200
+        return jsonify({"success": False, "error": "Kullanıcı adı gerekli!"}), 400
     if username not in users_db:
         users_db[username] = {"avatar": "", "pending": [], "friends": []}
     return jsonify({"success": True, "username": username})
@@ -264,7 +260,7 @@ def friend_request():
     receiver = data.get('friend_username')
     
     if not sender or not receiver:
-        return jsonify({"success": False, "error": "Eksik parametre!"}), 200
+        return jsonify({"success": False, "error": "Eksik parametre!"}), 400
         
     if sender not in users_db:
         users_db[sender] = {"avatar": "", "pending": [], "friends": []}
@@ -272,7 +268,7 @@ def friend_request():
         users_db[receiver] = {"avatar": "", "pending": [], "friends": []}
         
     if sender == receiver:
-        return jsonify({"success": False, "error": "Kendine istek atamazsın!"}), 200
+        return jsonify({"success": False, "error": "Kendine istek atamazsın!"}), 400
         
     receiver_data = users_db[receiver]
     if "pending" not in receiver_data:
@@ -280,7 +276,7 @@ def friend_request():
         
     existing_senders = [p["username"] for p in receiver_data["pending"]]
     if sender in existing_senders:
-        return jsonify({"success": False, "error": "Zaten istek atılmış!"}), 200
+        return jsonify({"success": False, "error": "Zaten istek atılmış!"}), 400
         
     receiver_data["pending"].append({"username": sender})
     return jsonify({"success": True})
@@ -312,7 +308,7 @@ def avatar():
     if username in users_db:
         users_db[username]["avatar"] = avatar_data
         return jsonify({"success": True})
-    return jsonify({"success": False}), 200
+    return jsonify({"success": False}), 404
 
 @app.route('/api/reset', methods=['POST'])
 def reset():
