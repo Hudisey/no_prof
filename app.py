@@ -1,8 +1,23 @@
 from flask import Flask, request, jsonify, render_template_string
+import json
+import os
 
 app = Flask(__name__)
 
-users_db = {}
+DB_FILE = "database.json"
+
+def load_db():
+    if not os.path.exists(DB_FILE):
+        return {}
+    try:
+        with open(DB_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_db(data):
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="tr">
@@ -114,7 +129,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             const friend_username = document.getElementById('friend-input').value.trim();
             if(!friend_username) return;
             
-            console.log("İstek atılıyor. Gönderen:", currentUser, "Hedef:", friend_username);
             const res = await fetch('/api/friend-request', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -207,33 +221,38 @@ def index():
 
 @app.route('/api/login', methods=['POST'])
 def login():
+    db = load_db()
     data = request.json or {}
     username = data.get('username')
     if not username:
         return jsonify({"success": False, "error": "Kullanıcı adı gerekli!"}), 400
-    if username not in users_db:
-        users_db[username] = {"avatar": "", "pending": [], "friends": []}
+    if username not in db:
+        db[username] = {"avatar": "", "pending": [], "friends": []}
+        save_db(db)
     return jsonify({"success": True, "username": username})
 
 @app.route('/api/friend-request', methods=['GET', 'POST'])
 def friend_request():
+    db = load_db()
     if request.method == 'GET':
         username = request.args.get('username')
-        user_data = users_db.get(username, {"pending": []})
+        user_data = db.get(username, {"pending": []})
         return jsonify({"pending": user_data.get("pending", [])})
     
     data = request.json or {}
     sender = data.get('username')
     receiver = data.get('friend_username')
     
-    # Hedef kullanıcı daha önce hiç giriş yapmadıysa veritabanına otomatik ekle ki istek atılabilsin
-    if receiver not in users_db:
-        users_db[receiver] = {"avatar": "", "pending": [], "friends": []}
+    if not receiver:
+        return jsonify({"success": False, "error": "Kullanıcı adı boş!"}), 400
+        
+    if receiver not in db:
+        db[receiver] = {"avatar": "", "pending": [], "friends": []}
         
     if sender == receiver:
         return jsonify({"success": False, "error": "Kendine istek atamazsın!"}), 400
         
-    receiver_data = users_db[receiver]
+    receiver_data = db[receiver]
     if "pending" not in receiver_data:
         receiver_data["pending"] = []
         
@@ -242,35 +261,42 @@ def friend_request():
         return jsonify({"success": False, "error": "Zaten istek atılmış!"}), 400
         
     receiver_data["pending"].append({"username": sender})
+    save_db(db)
     return jsonify({"success": True})
 
 @app.route('/api/friend-action', methods=['POST'])
 def friend_action():
+    db = load_db()
     data = request.json or {}
     username = data.get('username')
     friend_username = data.get('friend_username')
     
-    if username in users_db and "pending" in users_db[username]:
-        users_db[username]["pending"] = [p for p in users_db[username]["pending"] if p["username"] != friend_username]
+    if username in db and "pending" in db[username]:
+        db[username]["pending"] = [p for p in db[username]["pending"] if p["username"] != friend_username]
+        save_db(db)
     return jsonify({"success": True})
 
 @app.route('/api/avatar', methods=['POST'])
 def avatar():
+    db = load_db()
     data = request.json or {}
     username = data.get('username')
     avatar_data = data.get('avatar')
     
-    if username in users_db:
-        users_db[username]["avatar"] = avatar_data
+    if username in db:
+        db[username]["avatar"] = avatar_data
+        save_db(db)
         return jsonify({"success": True})
     return jsonify({"success": False}), 404
 
 @app.route('/api/reset', methods=['POST'])
 def reset():
+    db = load_db()
     data = request.json or {}
     username = data.get('username')
-    if username in users_db:
-        del users_db[username]
+    if username in db:
+        del db[username]
+        save_db(db)
     return jsonify({"success": True})
 
 if __name__ == '__main__':
