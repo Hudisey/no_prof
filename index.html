@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>NOPROF</title>
-    <!-- Favicon Eklenmesi -->
     <link rel="icon" type="image/png" href="favicon.png">
     <style>
         :root {
@@ -44,7 +43,6 @@
         
         #chat-box { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
         
-        /* Mesaj Hizalama (Sen sağda, karşı taraf solda) */
         .message-wrapper { display: flex; gap: 10px; align-items: flex-start; max-width: 70%; width: 100%; }
         .message-wrapper.outgoing { margin-left: auto; flex-direction: row-reverse; text-align: right; }
         .msg-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--accent); border: 1px solid var(--border); flex-shrink: 0; }
@@ -62,8 +60,8 @@
         .friend-item.active { background: var(--text); color: var(--bg); font-weight: bold; }
         .friend-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: var(--border); flex-shrink: 0; }
 
-        /* Bildirim Rozeti */
-        .badge { background: #ff4444; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; margin-left: auto; font-weight: bold; }
+        /* Discord Tarzı Kırmızı Daire Bildirim Rozeti */
+        .discord-badge { background: #ed4245; color: white; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-left: auto; font-weight: bold; }
 
         .settings-area { margin-top: auto; display: flex; align-items: center; position: relative; padding-top: 10px; border-top: 1px solid var(--border); }
         .settings-btn { background: transparent; border: 1px solid var(--border); color: var(--text); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: all 0.2s; padding: 0; }
@@ -94,7 +92,7 @@
     <div id="app-screen" class="hidden">
         <div class="sidebar">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">SOHBETLER & GRUPLAR</h3>
+                <h3 style="font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">SOHBETLER</h3>
                 <button onclick="openGroupModal()" style="padding: 4px 8px; font-size: 11px; border-radius: 8px;">Grup Kur</button>
             </div>
             <div style="display: flex; gap: 6px;">
@@ -285,7 +283,7 @@
             if(!membersStr) return;
 
             let members = membersStr.split(',').map(s => s.trim()).filter(s => s);
-            members.push(currentUser); // Kendini de ekle
+            members.push(currentUser);
 
             fetch('/api/groups', {
                 method: 'POST',
@@ -304,27 +302,31 @@
                 const box = document.getElementById('friend-box');
                 let html = '';
 
-                // Bekleyen İstekler (Bildirim Rozeti ile)
+                // Gelen İstekler & Discord Tarzı Kırmızı Daire Rozet
                 if(friendData.pending && friendData.pending.length > 0) {
-                    html += `<div style="font-size: 11px; color: #ff4444; font-weight: bold; margin-top: 5px;">Gelen İstekler</div>`;
+                    html += `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+                            <span style="font-size: 11px; color: #ed4245; font-weight: bold;">GELEN İSTEKLER</span>
+                            <span class="discord-badge">${friendData.pending.length}</span>
+                        </div>
+                    `;
                     friendData.pending.forEach(p => {
                         html += `
                             <div class="friend-item" style="justify-content: space-between;">
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <img src="${p.avatar || 'https://api.dicebear.com/7.x/identicon/svg?seed=' + p.username}" class="friend-avatar">
                                     <span>${p.username}</span>
-                                    <span class="badge">1</span>
                                 </div>
                                 <div style="display:flex; gap:4px;">
                                     <button onclick="respondRequest('${p.username}', 'accept')" style="padding:4px 8px; font-size:10px; border-radius:6px;">✓</button>
-                                    <button onclick="respondRequest('${p.username}', 'reject')" style="padding:4px 8px; font-size:10px; border-radius:6px; background:#ff4444; color:white;">✕</button>
+                                    <button onclick="respondRequest('${p.username}', 'reject')" style="padding:4px 8px; font-size:10px; border-radius:6px; background:#ed4245; color:white;">✕</button>
                                 </div>
                             </div>
                         `;
                     });
                 }
 
-                // Gruplar
+                // Gruplar Listesi
                 if(groupData.groups && groupData.groups.length > 0) {
                     html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">GRUPLAR</div>`;
                     groupData.groups.forEach(g => {
@@ -337,7 +339,7 @@
                     });
                 }
 
-                // Arkadaşlar
+                // Arkadaşlar Listesi
                 html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">ARKADAŞLAR</div>`;
                 if(friendData.friends && friendData.friends.length > 0) {
                     friendData.friends.forEach(f => {
