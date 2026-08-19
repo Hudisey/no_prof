@@ -65,7 +65,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <div id="settings-menu" class="hidden">
                 <button onclick="toggleTheme()" class="settings-btn">🌓 Tema Değiştir</button>
                 <button onclick="toggleLang()" class="settings-btn">🌍 Dil Değiştir (TR/EN)</button>
+                <button onclick="document.getElementById('avatar-input').click()" class="settings-btn">🖼️ Profil Resmi Ekle</button>
                 <button onclick="deleteAccount()" class="settings-btn danger">❌ Hesabı Sil</button>
+                <input type="file" id="avatar-input" class="hidden" onchange="uploadAvatar(this)">
             </div>
         </div>
         <div class="chat-main">
@@ -107,9 +109,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
         function toggleSettings() { document.getElementById('settings-menu').classList.toggle('hidden'); }
         function toggleRequests() { document.getElementById('requests-dropdown').classList.toggle('hidden'); }
+        
         async function sendFriendRequest() {
             const friend_username = document.getElementById('friend-input').value.trim();
             if(!friend_username) return;
+            
+            console.log("İstek atılıyor. Gönderen:", currentUser, "Hedef:", friend_username);
             const res = await fetch('/api/friend-request', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -123,6 +128,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 alert(resData.error || (isTr ? "İstek gönderilemedi!" : "Failed to send request!"));
             }
         }
+        
         async function respondRequest(friend_username, action) {
             await fetch('/api/friend-action', {
                 method: 'POST',
@@ -131,6 +137,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             });
             loadData();
         }
+
+        async function uploadAvatar(input) {
+            const file = input.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                await fetch('/api/avatar', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username: currentUser, avatar: e.target.result})
+                });
+                alert(isTr ? "Profil güncellendi!" : "Profile updated!");
+            };
+            reader.readAsDataURL(file);
+        }
+
         async function deleteAccount() {
             if(confirm(isTr ? "Hesabını silmek istediğine emin misin?" : "Are you sure you want to delete your account?")) {
                 await fetch('/api/reset', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({username: currentUser})});
@@ -138,6 +160,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 location.reload();
             }
         }
+
         async function loadData() {
             if(!currentUser) return;
             try {
@@ -189,7 +212,7 @@ def login():
     if not username:
         return jsonify({"success": False, "error": "Kullanıcı adı gerekli!"}), 400
     if username not in users_db:
-        users_db[username] = {"pending": [], "friends": []}
+        users_db[username] = {"avatar": "", "pending": [], "friends": []}
     return jsonify({"success": True, "username": username})
 
 @app.route('/api/friend-request', methods=['GET', 'POST'])
@@ -203,8 +226,10 @@ def friend_request():
     sender = data.get('username')
     receiver = data.get('friend_username')
     
-    if not receiver or receiver not in users_db:
-        return jsonify({"success": False, "error": "Kullanıcı bulunamadı!"}), 404
+    # Hedef kullanıcı daha önce hiç giriş yapmadıysa veritabanına otomatik ekle ki istek atılabilsin
+    if receiver not in users_db:
+        users_db[receiver] = {"avatar": "", "pending": [], "friends": []}
+        
     if sender == receiver:
         return jsonify({"success": False, "error": "Kendine istek atamazsın!"}), 400
         
@@ -228,6 +253,17 @@ def friend_action():
     if username in users_db and "pending" in users_db[username]:
         users_db[username]["pending"] = [p for p in users_db[username]["pending"] if p["username"] != friend_username]
     return jsonify({"success": True})
+
+@app.route('/api/avatar', methods=['POST'])
+def avatar():
+    data = request.json or {}
+    username = data.get('username')
+    avatar_data = data.get('avatar')
+    
+    if username in users_db:
+        users_db[username]["avatar"] = avatar_data
+        return jsonify({"success": True})
+    return jsonify({"success": False}), 404
 
 @app.route('/api/reset', methods=['POST'])
 def reset():
