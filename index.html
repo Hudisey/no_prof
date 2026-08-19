@@ -42,7 +42,6 @@
         
         #chat-box { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; justify-content: flex-start; }
         
-        /* Mesaj Stili ve Avatar */
         .message-wrapper { display: flex; gap: 10px; align-items: flex-start; max-width: 70%; }
         .msg-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--accent); border: 1px solid var(--border); flex-shrink: 0; }
         .message { background: var(--surface); border: 1px solid var(--border); padding: 12px 16px; border-radius: 12px; word-break: break-all; font-size: 13px; text-align: left; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
@@ -57,12 +56,10 @@
         .friend-item.active { background: var(--text); color: var(--bg); font-weight: bold; }
         .friend-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; background: var(--border); }
 
-        /* Sol Alt Ayarlar Bölümü */
         .settings-area { margin-top: auto; display: flex; align-items: center; position: relative; padding-top: 10px; border-top: 1px solid var(--border); }
         .settings-btn { background: transparent; border: 1px solid var(--border); color: var(--text); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: all 0.2s; box-shadow: none; padding: 0; }
         .settings-btn:hover { background: var(--accent); transform: rotate(45deg); }
 
-        /* Ayarlar Menü Balonu */
         .settings-menu { position: absolute; bottom: 55px; left: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; width: 210px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 100; }
         .action-btn { background: var(--accent); border: 1px solid var(--border); color: var(--text); width: 100%; padding: 8px; border-radius: 8px; font-size: 12px; text-align: center; cursor: pointer; font-family: monospace; transition: all 0.2s; }
         .action-btn:hover { opacity: 0.8; }
@@ -71,6 +68,9 @@
     </style>
 </head>
 <body data-theme="dark">
+
+    <!-- Gizli Dosya Seçici -->
+    <input type="file" id="avatar-file-input" accept="image/*" class="hidden" onchange="uploadAvatarFile(this)">
 
     <div class="top-controls">
         <div class="control-btn" id="theme-btn" onclick="toggleTheme()">🌙</div>
@@ -94,9 +94,8 @@
 
             <div class="settings-area">
                 <div class="settings-btn" onclick="toggleSettingsMenu(event)">⚙️</div>
-                <!-- Ayarlar Pop-up Menüsü -->
                 <div class="settings-menu hidden" id="settings-menu">
-                    <button class="action-btn" id="txt-avatar-btn" onclick="changeAvatar()">AVATAR DEĞİŞTİR</button>
+                    <button class="action-btn" id="txt-avatar-btn" onclick="triggerAvatarSelect()">AVATAR DEĞİŞTİR</button>
                     <button class="danger-btn" id="txt-reset-btn" onclick="resetAccount()">HESABI SİL</button>
                 </div>
             </div>
@@ -190,22 +189,33 @@
             setInterval(loadFriends, 4000);
         }
 
-        function changeAvatar() {
-            const newAvatar = prompt("Profil fotoğrafı için görsel URL'si gir (örn: https://...):");
-            if(!newAvatar || !newAvatar.trim()) return;
+        function triggerAvatarSelect() {
+            document.getElementById('avatar-file-input').click();
+        }
 
-            fetch('/api/avatar', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: currentUser, avatar: newAvatar.trim()})
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.success) {
-                    alert("Avatar güncellendi!");
-                    loadMessages();
-                }
-            });
+        function uploadAvatarFile(input) {
+            const file = input.files[0];
+            if(!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const base64Image = e.target.result;
+
+                fetch('/api/avatar', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username: currentUser, avatar: base64Image})
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if(data.success) {
+                        alert("Profil fotoğrafın başarıyla güncellendi!");
+                        loadMessages();
+                        loadFriends();
+                    }
+                });
+            };
+            reader.readAsDataURL(file);
         }
 
         function selectChat(username, event) {
