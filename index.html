@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>NOPROF</title>
+    <!-- Favicon Eklenmesi -->
+    <link rel="icon" type="image/png" href="favicon.png">
     <style>
         :root {
             --bg: #000000;
@@ -37,28 +39,34 @@
         .control-btn:hover { background: var(--accent); transform: scale(1.05); }
 
         #app-screen { display: flex; width: 100%; height: 100%; position: relative; }
-        .sidebar { width: 260px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 15px; gap: 15px; }
+        .sidebar { width: 280px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 15px; gap: 12px; }
         .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
         
-        #chat-box { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; justify-content: flex-start; }
+        #chat-box { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
         
-        .message-wrapper { display: flex; gap: 10px; align-items: flex-start; max-width: 70%; }
+        /* Mesaj Hizalama (Sen sağda, karşı taraf solda) */
+        .message-wrapper { display: flex; gap: 10px; align-items: flex-start; max-width: 70%; width: 100%; }
+        .message-wrapper.outgoing { margin-left: auto; flex-direction: row-reverse; text-align: right; }
         .msg-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--accent); border: 1px solid var(--border); flex-shrink: 0; }
         .message { background: var(--surface); border: 1px solid var(--border); padding: 12px 16px; border-radius: 12px; word-break: break-all; font-size: 13px; text-align: left; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .message-wrapper.outgoing .message { background: var(--text); color: var(--bg); border-color: transparent; }
         .message .msg-user { color: var(--text-dim); font-size: 11px; margin-bottom: 4px; font-weight: bold; display: block; }
+        .message-wrapper.outgoing .msg-user { color: var(--bg); opacity: 0.8; }
 
         .input-box { display: flex; padding: 15px 25px; background: var(--surface); border-top: 1px solid var(--border); gap: 12px; align-items: center; }
         .input-box input { flex: 1; text-align: left; border-radius: 12px; }
 
-        /* Arkadaş Listesi - Büyütülmüş Tasarım */
-        .friend-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+        .friend-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
         .friend-item { font-size: 14px; color: var(--text-dim); padding: 10px 14px; border-radius: 14px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 12px; }
         .friend-item:hover { background: var(--accent); color: var(--text); }
         .friend-item.active { background: var(--text); color: var(--bg); font-weight: bold; }
         .friend-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: var(--border); flex-shrink: 0; }
 
+        /* Bildirim Rozeti */
+        .badge { background: #ff4444; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; margin-left: auto; font-weight: bold; }
+
         .settings-area { margin-top: auto; display: flex; align-items: center; position: relative; padding-top: 10px; border-top: 1px solid var(--border); }
-        .settings-btn { background: transparent; border: 1px solid var(--border); color: var(--text); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: all 0.2s; box-shadow: none; padding: 0; }
+        .settings-btn { background: transparent; border: 1px solid var(--border); color: var(--text); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: all 0.2s; padding: 0; }
         .settings-btn:hover { background: var(--accent); transform: rotate(45deg); }
 
         .settings-menu { position: absolute; bottom: 55px; left: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; width: 210px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 100; }
@@ -78,57 +86,50 @@
     </div>
 
     <div id="login-screen">
-        <h2 id="txt-title" style="letter-spacing: 2px;">NOPROF</h2>
+        <h2 style="letter-spacing: 2px;">NOPROF</h2>
         <input type="text" id="username-input" placeholder="kullanıcı adı...">
-        <button id="txt-login-btn" onclick="login()">GİRİŞ</button>
+        <button onclick="login()">GİRİŞ</button>
     </div>
 
     <div id="app-screen" class="hidden">
         <div class="sidebar">
-            <h3 id="txt-friends-title" style="font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">ARKADAŞLAR</h3>
-            <div style="display: flex; gap: 6px;">
-                <input type="text" id="friend-input" placeholder="ekle..." style="width: 100%; padding: 8px 12px; font-size: 12px; border-radius: 12px;">
-                <button onclick="addFriend()" style="padding: 8px 14px; font-size: 14px; border-radius: 12px;">+</button>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">SOHBETLER & GRUPLAR</h3>
+                <button onclick="openGroupModal()" style="padding: 4px 8px; font-size: 11px; border-radius: 8px;">Grup Kur</button>
             </div>
+            <div style="display: flex; gap: 6px;">
+                <input type="text" id="friend-input" placeholder="arkadaş ekle..." style="width: 100%; padding: 8px 12px; font-size: 12px; border-radius: 12px;">
+                <button onclick="sendFriendRequest()" style="padding: 8px 14px; font-size: 14px; border-radius: 12px;">+</button>
+            </div>
+            
             <div class="friend-list" id="friend-box"></div>
 
             <div class="settings-area">
                 <div class="settings-btn" onclick="toggleSettingsMenu(event)">⚙️</div>
                 <div class="settings-menu hidden" id="settings-menu">
-                    <button class="action-btn" id="txt-avatar-btn" onclick="triggerAvatarSelect()">AVATAR DEĞİŞTİR</button>
-                    <button class="danger-btn" id="txt-reset-btn" onclick="resetAccount()">HESABI SİL</button>
+                    <button class="action-btn" onclick="triggerAvatarSelect()">AVATAR DEĞİŞTİR</button>
+                    <button class="danger-btn" onclick="resetAccount()">HESABI SİL</button>
                 </div>
             </div>
         </div>
 
         <div class="chat-area">
             <div id="chat-box">
-                <div style="color: var(--text-dim); margin: auto;">Bir arkadaş seç ve sohbet etmeye başla.</div>
+                <div style="color: var(--text-dim); margin: auto;">Bir sohbet veya grup seç.</div>
             </div>
             <div class="input-box hidden" id="msg-container">
                 <input type="text" id="msg-input" placeholder="mesaj yaz..." onkeypress="if(event.key === 'Enter') sendMessage()">
-                <button id="txt-send-btn" onclick="sendMessage()">GÖNDER</button>
+                <button onclick="sendMessage()">GÖNDER</button>
             </div>
         </div>
     </div>
 
     <script>
         let currentUser = localStorage.getItem('noprof_user');
-        let currentLang = 'tr';
         let currentTheme = 'dark';
         let activeChat = null;
+        let isGroupChat = 0;
         let messageInterval = null;
-
-        const texts = {
-            tr: { loginBtn: "GİRİŞ", usernamePlaceholder: "kullanıcı adı...", friendsTitle: "ARKADAŞLAR", friendPlaceholder: "ekle...", avatarBtn: "AVATAR DEĞİŞTİR", resetBtn: "HESABI SİL", sendBtn: "GÖNDER", msgPlaceholder: "mesaj yaz..." },
-            en: { loginBtn: "LOGIN", usernamePlaceholder: "username...", friendsTitle: "FRIENDS", friendPlaceholder: "add...", avatarBtn: "CHANGE AVATAR", resetBtn: "DELETE ACCOUNT", sendBtn: "SEND", msgPlaceholder: "type a message..." }
-        };
-
-        function toggleLang() {
-            currentLang = currentLang === 'tr' ? 'en' : 'tr';
-            document.getElementById('lang-btn').innerText = currentLang === 'tr' ? '🇹🇷' : '🇬🇧';
-            updateTexts();
-        }
 
         function toggleTheme() {
             currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -138,28 +139,13 @@
 
         function toggleSettingsMenu(e) {
             e.stopPropagation();
-            const menu = document.getElementById('settings-menu');
-            menu.classList.toggle('hidden');
+            document.getElementById('settings-menu').classList.toggle('hidden');
         }
 
         window.addEventListener('click', () => {
             const menu = document.getElementById('settings-menu');
-            if(menu && !menu.classList.contains('hidden')) {
-                menu.classList.add('hidden');
-            }
+            if(menu) menu.classList.add('hidden');
         });
-
-        function updateTexts() {
-            const t = texts[currentLang];
-            document.getElementById('txt-login-btn').innerText = t.loginBtn;
-            document.getElementById('username-input').placeholder = t.usernamePlaceholder;
-            document.getElementById('txt-friends-title').innerText = t.friendsTitle;
-            document.getElementById('friend-input').placeholder = t.friendPlaceholder;
-            document.getElementById('txt-avatar-btn').innerText = t.avatarBtn;
-            document.getElementById('txt-reset-btn').innerText = t.resetBtn;
-            document.getElementById('txt-send-btn').innerText = t.sendBtn;
-            document.getElementById('msg-input').placeholder = t.msgPlaceholder;
-        }
 
         if(currentUser) { showApp(); }
 
@@ -185,8 +171,8 @@
         function showApp() {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
-            loadFriends();
-            setInterval(loadFriends, 4000);
+            loadSidebar();
+            setInterval(loadSidebar, 4000);
         }
 
         function triggerAvatarSelect() {
@@ -199,27 +185,20 @@
 
             const reader = new FileReader();
             reader.onload = function(e) {
-                const base64Image = e.target.result;
-
                 fetch('/api/avatar', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username: currentUser, avatar: base64Image})
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if(data.success) {
-                        alert("Profil fotoğrafın başarıyla güncellendi!");
-                        loadMessages();
-                        loadFriends();
-                    }
+                    body: JSON.stringify({username: currentUser, avatar: e.target.result})
+                }).then(res => res.json()).then(data => {
+                    if(data.success) { alert("Avatar güncellendi!"); loadMessages(); loadSidebar(); }
                 });
             };
             reader.readAsDataURL(file);
         }
 
-        function selectChat(username, event) {
-            activeChat = username;
+        function selectChat(name, groupFlag, event) {
+            activeChat = name;
+            isGroupChat = groupFlag;
             document.getElementById('msg-container').classList.remove('hidden');
             
             document.querySelectorAll('.friend-item').forEach(el => el.classList.remove('active'));
@@ -233,48 +212,48 @@
         function sendMessage() {
             const message = document.getElementById('msg-input').value.trim();
             if(!message || !activeChat) return;
-
             document.getElementById('msg-input').value = '';
 
             fetch('/api/messages', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: currentUser, friend_username: activeChat, message})
-            }).then(() => {
-                loadMessages();
-            });
+                body: JSON.stringify({username: currentUser, receiver: activeChat, is_group: isGroupChat, message})
+            }).then(() => loadMessages());
         }
 
         function loadMessages() {
             if(!activeChat) return;
-            fetch(`/api/messages?username=${currentUser}&friend_username=${activeChat}`)
+            fetch(`/api/messages?username=${currentUser}&receiver=${activeChat}&is_group=${isGroupChat}`)
             .then(res => res.json())
             .then(data => {
                 if(data.success) {
                     const box = document.getElementById('chat-box');
                     if(data.messages.length === 0) {
-                        box.innerHTML = `<div style="color: var(--text-dim); margin: auto;">Henüz mesaj yok. İlk mesajı sen yaz!</div>`;
+                        box.innerHTML = `<div style="color: var(--text-dim); margin: auto;">Henüz mesaj yok.</div>`;
                         return;
                     }
-                    box.innerHTML = data.messages.map(m => `
-                        <div class="message-wrapper">
-                            <img src="${m.avatar || 'https://api.dicebear.com/7.x/identicon/svg?seed=' + m.username}" class="msg-avatar">
-                            <div class="message">
-                                <span class="msg-user">${m.username}</span>
-                                <div>${m.message}</div>
+                    box.innerHTML = data.messages.map(m => {
+                        const isOutgoing = m.username === currentUser;
+                        return `
+                            <div class="message-wrapper ${isOutgoing ? 'outgoing' : ''}">
+                                <img src="${m.avatar || 'https://api.dicebear.com/7.x/identicon/svg?seed=' + m.username}" class="msg-avatar">
+                                <div class="message">
+                                    <span class="msg-user">${m.username}</span>
+                                    <div>${m.message}</div>
+                                </div>
                             </div>
-                        </div>
-                    `).join('');
+                        `;
+                    }).join('');
                     box.scrollTop = box.scrollHeight;
                 }
             });
         }
 
-        function addFriend() {
+        function sendFriendRequest() {
             const friend_username = document.getElementById('friend-input').value.trim();
             if(!friend_username) return;
 
-            fetch('/api/friends', {
+            fetch('/api/friend-request', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username: currentUser, friend_username})
@@ -283,30 +262,97 @@
             .then(data => {
                 if(data.success) {
                     document.getElementById('friend-input').value = '';
-                    loadFriends();
+                    alert("Arkadaşlık isteği gönderildi!");
+                    loadSidebar();
                 } else {
-                    alert(data.error || "Kullanıcı eklenemedi.");
+                    alert(data.error);
                 }
             });
         }
 
-        function loadFriends() {
-            fetch(`/api/friends?username=${currentUser}`)
-            .then(res => res.json())
-            .then(data => {
-                if(data.success) {
-                    const box = document.getElementById('friend-box');
-                    if(data.friends.length === 0) {
-                        box.innerHTML = `<div style="font-size:12px; color:var(--text-dim); padding: 5px;">Henüz arkadaş yok.</div>`;
-                        return;
-                    }
-                    box.innerHTML = data.friends.map(f => `
-                        <div class="friend-item ${activeChat === f.friend_username ? 'active' : ''}" onclick="selectChat('${f.friend_username}', event)">
-                            <img src="${f.avatar || 'https://api.dicebear.com/7.x/identicon/svg?seed=' + f.friend_username}" class="friend-avatar">
-                            <span>${f.friend_username}</span>
-                        </div>
-                    `).join('');
+        function respondRequest(friend_username, action) {
+            fetch('/api/friend-action', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: currentUser, friend_username, action})
+            }).then(() => loadSidebar());
+        }
+
+        function openGroupModal() {
+            const gName = prompt("Grup adı gir:");
+            if(!gName) return;
+            const membersStr = prompt("Grupta olacak kişileri virgülle ayırarak yaz (örn: ahmet,mehmet):");
+            if(!membersStr) return;
+
+            let members = membersStr.split(',').map(s => s.trim()).filter(s => s);
+            members.push(currentUser); // Kendini de ekle
+
+            fetch('/api/groups', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({group_name: gName, members})
+            }).then(res => res.json()).then(data => {
+                if(data.success) { alert("Grup kuruldu!"); loadSidebar(); }
+            });
+        }
+
+        function loadSidebar() {
+            Promise.all([
+                fetch(`/api/friend-request?username=${currentUser}`).then(r => r.json()),
+                fetch(`/api/groups?username=${currentUser}`).then(r => r.json())
+            ]).then(([friendData, groupData]) => {
+                const box = document.getElementById('friend-box');
+                let html = '';
+
+                // Bekleyen İstekler (Bildirim Rozeti ile)
+                if(friendData.pending && friendData.pending.length > 0) {
+                    html += `<div style="font-size: 11px; color: #ff4444; font-weight: bold; margin-top: 5px;">Gelen İstekler</div>`;
+                    friendData.pending.forEach(p => {
+                        html += `
+                            <div class="friend-item" style="justify-content: space-between;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <img src="${p.avatar || 'https://api.dicebear.com/7.x/identicon/svg?seed=' + p.username}" class="friend-avatar">
+                                    <span>${p.username}</span>
+                                    <span class="badge">1</span>
+                                </div>
+                                <div style="display:flex; gap:4px;">
+                                    <button onclick="respondRequest('${p.username}', 'accept')" style="padding:4px 8px; font-size:10px; border-radius:6px;">✓</button>
+                                    <button onclick="respondRequest('${p.username}', 'reject')" style="padding:4px 8px; font-size:10px; border-radius:6px; background:#ff4444; color:white;">✕</button>
+                                </div>
+                            </div>
+                        `;
+                    });
                 }
+
+                // Gruplar
+                if(groupData.groups && groupData.groups.length > 0) {
+                    html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">GRUPLAR</div>`;
+                    groupData.groups.forEach(g => {
+                        html += `
+                            <div class="friend-item ${activeChat === g.group_name && isGroupChat === 1 ? 'active' : ''}" onclick="selectChat('${g.group_name}', 1, event)">
+                                <div class="friend-avatar" style="display:flex; align-items:center; justify-content:center; font-weight:bold;">#</div>
+                                <span>${g.group_name}</span>
+                            </div>
+                        `;
+                    });
+                }
+
+                // Arkadaşlar
+                html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">ARKADAŞLAR</div>`;
+                if(friendData.friends && friendData.friends.length > 0) {
+                    friendData.friends.forEach(f => {
+                        html += `
+                            <div class="friend-item ${activeChat === f.friend_username && isGroupChat === 0 ? 'active' : ''}" onclick="selectChat('${f.friend_username}', 0, event)">
+                                <img src="${f.avatar || 'https://api.dicebear.com/7.x/identicon/svg?seed=' + f.friend_username}" class="friend-avatar">
+                                <span>${f.friend_username}</span>
+                            </div>
+                        `;
+                    });
+                } else {
+                    html += `<div style="font-size: 12px; color: var(--text-dim); padding: 5px;">Henüz arkadaş yok.</div>`;
+                }
+
+                box.innerHTML = html;
             });
         }
 
