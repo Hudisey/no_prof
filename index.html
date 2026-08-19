@@ -33,7 +33,7 @@
         button:active { transform: translateY(0); }
 
         .top-controls { position: absolute; top: 20px; right: 20px; display: flex; gap: 8px; z-index: 10; }
-        .control-btn { cursor: pointer; font-size: 16px; background: var(--surface); border: 1px solid var(--border); padding: 8px 12px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .control-btn { cursor: pointer; font-size: 14px; background: var(--surface); border: 1px solid var(--border); padding: 8px 12px; border-radius: 20px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-family: monospace; font-weight: bold; color: var(--text); }
         .control-btn:hover { background: var(--accent); transform: scale(1.05); }
 
         #app-screen { display: flex; width: 100%; height: 100%; position: relative; }
@@ -59,7 +59,7 @@
         .friend-item.active { background: var(--text); color: var(--bg); font-weight: bold; }
         .friend-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: var(--border); flex-shrink: 0; }
 
-        /* Discord Tarzı Kırmızı Daire Bildirim Rozeti & Zil */
+        /* Bildirim Rozeti & Zil */
         .bell-container { position: relative; display: inline-block; }
         .discord-badge { background: #ed4245; color: white; font-size: 10px; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: absolute; top: -4px; right: -4px; font-weight: bold; }
 
@@ -82,36 +82,37 @@
     <input type="file" id="avatar-file-input" accept="image/*" class="hidden" onchange="uploadAvatarFile(this)">
 
     <div class="top-controls">
-        <div class="control-btn" id="theme-btn" onclick="toggleTheme()">🌙</div>
+        <div class="control-btn" id="lang-btn" onclick="toggleLanguage()">EN</div>
+        <div class="control-btn" id="theme-btn" onclick="toggleTheme()" style="border-radius: 50%; width: 36px; height: 36px; padding: 0;">🌙</div>
     </div>
 
     <div id="login-screen">
         <h2 style="letter-spacing: 2px;">NOPROF</h2>
         <input type="text" id="username-input" placeholder="kullanıcı adı...">
-        <button onclick="login()">GİRİŞ</button>
+        <button id="login-btn" onclick="login()">GİRİŞ</button>
     </div>
 
     <div id="app-screen" class="hidden">
         <div class="sidebar">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">SOHBETLER</h3>
-                <button onclick="openGroupModal()" style="padding: 4px 8px; font-size: 11px; border-radius: 8px;">Grup Kur</button>
+                <h3 id="sidebar-chats" style="font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">SOHBETLER</h3>
+                <button id="group-btn" onclick="openGroupModal()" style="padding: 4px 8px; font-size: 11px; border-radius: 8px;">Grup Kur</button>
             </div>
             
             <!-- Arkadaş Ekleme ve Zil Alanı -->
             <div style="display: flex; gap: 6px; align-items: center;">
-                <input type="text" id="friend-input" placeholder="arkadaş ekle..." style="width: 140px; padding: 8px 10px; font-size: 12px; border-radius: 12px;">
-                <button onclick="sendFriendRequest()" style="padding: 8px 12px; font-size: 14px; border-radius: 12px;" title="Arkadaş Ekle">+</button>
+                <input type="text" id="friend-input" placeholder="arkadaş ekle..." style="width: 120px; padding: 8px 10px; font-size: 12px; border-radius: 12px;">
+                <button onclick="sendFriendRequest()" style="padding: 8px 10px; font-size: 13px; border-radius: 12px;" title="Arkadaş Ekle">+</button>
                 
-                <div class="bell-container">
-                    <button onclick="toggleRequestsMenu(event)" style="padding: 8px 12px; font-size: 14px; border-radius: 12px; background: var(--accent); color: var(--text); border: 1px solid var(--border);" title="İstekler">🔔</button>
+                <div class="bell-container" style="margin-left: auto;">
+                    <button onclick="toggleRequestsMenu(event)" style="padding: 8px 10px; font-size: 13px; border-radius: 12px; background: var(--accent); color: var(--text); border: 1px solid var(--border);" title="İstekler">🔔</button>
                     <span id="req-badge" class="discord-badge hidden">0</span>
                 </div>
             </div>
 
             <!-- Gelen İstekler Açılır Menüsü -->
             <div id="requests-dropdown" class="requests-dropdown hidden" onclick="event.stopPropagation()">
-                <div style="font-size: 11px; color: var(--text-dim); font-weight: bold; margin-bottom: 4px;">GELEN İSTEKLER</div>
+                <div id="req-title" style="font-size: 11px; color: var(--text-dim); font-weight: bold; margin-bottom: 4px;">GELEN İSTEKLER</div>
                 <div id="requests-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto;"></div>
             </div>
             
@@ -120,19 +121,19 @@
             <div class="settings-area">
                 <div class="settings-btn" onclick="toggleSettingsMenu(event)">⚙️</div>
                 <div class="settings-menu hidden" id="settings-menu">
-                    <button class="action-btn" onclick="triggerAvatarSelect()">AVATAR DEĞİŞTİR</button>
-                    <button class="danger-btn" onclick="resetAccount()">HESABI SİL</button>
+                    <button id="menu-avatar" class="action-btn" onclick="triggerAvatarSelect()">AVATAR DEĞİŞTİR</button>
+                    <button id="menu-delete" class="danger-btn" onclick="resetAccount()">HESABI SİL</button>
                 </div>
             </div>
         </div>
 
         <div class="chat-area">
             <div id="chat-box">
-                <div style="color: var(--text-dim); margin: auto;">Bir sohbet veya grup seç.</div>
+                <div id="chat-placeholder" style="color: var(--text-dim); margin: auto;">Bir sohbet veya grup seç.</div>
             </div>
             <div class="input-box hidden" id="msg-container">
                 <input type="text" id="msg-input" placeholder="mesaj yaz..." onkeypress="if(event.key === 'Enter') sendMessage()">
-                <button onclick="sendMessage()">GÖNDER</button>
+                <button id="send-btn" onclick="sendMessage()">GÖNDER</button>
             </div>
         </div>
     </div>
@@ -140,9 +141,86 @@
     <script>
         let currentUser = localStorage.getItem('noprof_user');
         let currentTheme = 'dark';
+        let currentLang = 'tr';
         let activeChat = null;
         let isGroupChat = 0;
         let messageInterval = null;
+
+        const translations = {
+            tr: {
+                loginPlaceholder: "kullanıcı adı...",
+                loginBtn: "GİRİŞ",
+                chats: "SOHBETLER",
+                groupBtn: "Grup Kur",
+                friendPlaceholder: "arkadaş ekle...",
+                reqTitle: "GELEN İSTEKLER",
+                noReq: "Bekleyen istek yok.",
+                groupsHeader: "GRUPLAR",
+                friendsHeader: "ARKADAŞLAR",
+                noFriends: "Henüz arkadaş yok.",
+                menuAvatar: "AVATAR DEĞİŞTİR",
+                menuDelete: "HESABI SİL",
+                chatPlaceholder: "Bir sohbet veya grup seç.",
+                msgPlaceholder: "mesaj yaz...",
+                sendBtn: "GÖNDER",
+                alertReqSent: "Arkadaşlık isteği gönderildi!",
+                alertGroupCreated: "Grup kuruldu!",
+                alertAvatarUpdated: "Avatar güncellendi!",
+                confirmDelete: "Emin misin?",
+                promptGroupName: "Grup adı gir:",
+                promptGroupMembers: "Grupta olacak kişileri virgülle ayırarak yaz (örn: ahmet,mehmet):",
+                noMsgs: "Henüz mesaj yok."
+            },
+            en: {
+                loginPlaceholder: "username...",
+                loginBtn: "LOGIN",
+                chats: "CHATS",
+                groupBtn: "New Group",
+                friendPlaceholder: "add friend...",
+                reqTitle: "FRIEND REQUESTS",
+                noReq: "No pending requests.",
+                groupsHeader: "GROUPS",
+                friendsHeader: "FRIENDS",
+                noFriends: "No friends yet.",
+                menuAvatar: "CHANGE AVATAR",
+                menuDelete: "DELETE ACCOUNT",
+                chatPlaceholder: "Select a chat or group.",
+                msgPlaceholder: "type a message...",
+                sendBtn: "SEND",
+                alertReqSent: "Friend request sent!",
+                alertGroupCreated: "Group created!",
+                alertAvatarUpdated: "Avatar updated!",
+                confirmDelete: "Are you sure?",
+                promptGroupName: "Enter group name:",
+                promptGroupMembers: "Enter members separated by comma (e.g. john,doe):",
+                noMsgs: "No messages yet."
+            }
+        };
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'tr' ? 'en' : 'tr';
+            document.getElementById('lang-btn').innerText = currentLang.toUpperCase();
+            updateTexts();
+        }
+
+        function updateTexts() {
+            const t = translations[currentLang];
+            document.getElementById('username-input').placeholder = t.loginPlaceholder;
+            document.getElementById('login-btn').innerText = t.loginBtn;
+            document.getElementById('sidebar-chats').innerText = t.chats;
+            document.getElementById('group-btn').innerText = t.groupBtn;
+            document.getElementById('friend-input').placeholder = t.friendPlaceholder;
+            document.getElementById('req-title').innerText = t.reqTitle;
+            document.getElementById('menu-avatar').innerText = t.menuAvatar;
+            document.getElementById('menu-delete').innerText = t.menuDelete;
+            document.getElementById('msg-input').placeholder = t.msgPlaceholder;
+            document.getElementById('send-btn').innerText = t.sendBtn;
+            
+            const placeholder = document.getElementById('chat-placeholder');
+            if(placeholder) placeholder.innerText = t.chatPlaceholder;
+            
+            loadSidebar();
+        }
 
         function toggleTheme() {
             currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -204,6 +282,7 @@
         function uploadAvatarFile(input) {
             const file = input.files[0];
             if(!file) return;
+            const t = translations[currentLang];
 
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -212,7 +291,7 @@
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({username: currentUser, avatar: e.target.result})
                 }).then(res => res.json()).then(data => {
-                    if(data.success) { alert("Avatar güncellendi!"); loadMessages(); loadSidebar(); }
+                    if(data.success) { alert(t.alertAvatarUpdated); loadMessages(); loadSidebar(); }
                 });
             };
             reader.readAsDataURL(file);
@@ -245,13 +324,14 @@
 
         function loadMessages() {
             if(!activeChat) return;
+            const t = translations[currentLang];
             fetch(`/api/messages?username=${currentUser}&receiver=${activeChat}&is_group=${isGroupChat}`)
             .then(res => res.json())
             .then(data => {
                 if(data.success) {
                     const box = document.getElementById('chat-box');
                     if(data.messages.length === 0) {
-                        box.innerHTML = `<div style="color: var(--text-dim); margin: auto;">Henüz mesaj yok.</div>`;
+                        box.innerHTML = `<div style="color: var(--text-dim); margin: auto;">${t.noMsgs}</div>`;
                         return;
                     }
                     box.innerHTML = data.messages.map(m => {
@@ -274,6 +354,7 @@
         function sendFriendRequest() {
             const friend_username = document.getElementById('friend-input').value.trim();
             if(!friend_username) return;
+            const t = translations[currentLang];
 
             fetch('/api/friend-request', {
                 method: 'POST',
@@ -284,7 +365,7 @@
             .then(data => {
                 if(data.success) {
                     document.getElementById('friend-input').value = '';
-                    alert("Arkadaşlık isteği gönderildi!");
+                    alert(t.alertReqSent);
                     loadSidebar();
                 } else {
                     alert(data.error);
@@ -301,9 +382,10 @@
         }
 
         function openGroupModal() {
-            const gName = prompt("Grup adı gir:");
+            const t = translations[currentLang];
+            const gName = prompt(t.promptGroupName);
             if(!gName) return;
-            const membersStr = prompt("Grupta olacak kişileri virgülle ayırarak yaz (örn: ahmet,mehmet):");
+            const membersStr = prompt(t.promptGroupMembers);
             if(!membersStr) return;
 
             let members = membersStr.split(',').map(s => s.trim()).filter(s => s);
@@ -314,11 +396,12 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({group_name: gName, members})
             }).then(res => res.json()).then(data => {
-                if(data.success) { alert("Grup kuruldu!"); loadSidebar(); }
+                if(data.success) { alert(t.alertGroupCreated); loadSidebar(); }
             });
         }
 
         function loadSidebar() {
+            const t = translations[currentLang];
             Promise.all([
                 fetch(`/api/friend-request?username=${currentUser}`).then(r => r.json()),
                 fetch(`/api/groups?username=${currentUser}`).then(r => r.json())
@@ -326,7 +409,6 @@
                 const badge = document.getElementById('req-badge');
                 const reqList = document.getElementById('requests-list');
 
-                // Zil Üstündeki Kırmızı Rozet Yönetimi
                 if(friendData.pending && friendData.pending.length > 0) {
                     badge.classList.remove('hidden');
                     badge.innerText = friendData.pending.length;
@@ -349,15 +431,14 @@
                     reqList.innerHTML = reqHtml;
                 } else {
                     badge.classList.add('hidden');
-                    reqList.innerHTML = `<div style="font-size: 11px; color: var(--text-dim); text-align: center; padding: 10px;">Bekleyen istek yok.</div>`;
+                    reqList.innerHTML = `<div style="font-size: 11px; color: var(--text-dim); text-align: center; padding: 10px;">${t.noReq}</div>`;
                 }
 
                 const box = document.getElementById('friend-box');
                 let html = '';
 
-                // Gruplar Listesi
                 if(groupData.groups && groupData.groups.length > 0) {
-                    html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 5px;">GRUPLAR</div>`;
+                    html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 5px;">${t.groupsHeader}</div>`;
                     groupData.groups.forEach(g => {
                         html += `
                             <div class="friend-item ${activeChat === g.group_name && isGroupChat === 1 ? 'active' : ''}" onclick="selectChat('${g.group_name}', 1, event)">
@@ -368,8 +449,7 @@
                     });
                 }
 
-                // Arkadaşlar Listesi
-                html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">ARKADAŞLAR</div>`;
+                html += `<div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">${t.friendsHeader}</div>`;
                 if(friendData.friends && friendData.friends.length > 0) {
                     friendData.friends.forEach(f => {
                         html += `
@@ -380,7 +460,7 @@
                         `;
                     });
                 } else {
-                    html += `<div style="font-size: 12px; color: var(--text-dim); padding: 5px;">Henüz arkadaş yok.</div>`;
+                    html += `<div style="font-size: 12px; color: var(--text-dim); padding: 5px;">${t.noFriends}</div>`;
                 }
 
                 box.innerHTML = html;
@@ -388,7 +468,8 @@
         }
 
         function resetAccount() {
-            if(!confirm("Emin misin?")) return;
+            const t = translations[currentLang];
+            if(!confirm(t.confirmDelete)) return;
             fetch('/api/reset', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
