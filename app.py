@@ -7,8 +7,7 @@ app = Flask(__name__)
 users_db = {}
 
 @app.route('/')
-index():
-    # Eğer index.html kullanıyorsan veya tek dosya üzerinden yönetiyorsan
+def index():
     return render_template('index.html')
 
 @app.route('/api/login', methods=['POST'])
