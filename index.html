@@ -23,7 +23,6 @@
         .input-box { display: flex; padding: 15px; background: #0f172a; border-top: 1px solid #1e293b; gap: 10px; }
         .input-box input { flex: 1; }
 
-        /* Sol Alt Ayarlar Butonu */
         .settings-area { margin-top: auto; padding-top: 10px; border-top: 1px solid #1e293b; }
         .danger-btn { background: #ef4444; width: 100%; }
         .danger-btn:hover { background: #dc2626; }
@@ -53,7 +52,6 @@
             </div>
             <div class="friend-list" id="friend-box"></div>
 
-            <!-- Sol Alt Ayarlar -->
             <div class="settings-area">
                 <button class="danger-btn" onclick="resetAccount()">Hesabı & Her Şeyi Sil</button>
             </div>
@@ -75,42 +73,40 @@
             showApp();
         }
 
-       function login() {
-    const usernameInput = document.getElementById('username-input');
-    const username = usernameInput.value.trim();
-    
-    if(!username) {
-        alert("Lütfen bir kullanıcı adı gir!");
-        return;
-    }
+        function login() {
+            const username = document.getElementById('username-input').value.trim();
+            if(!username) {
+                alert("Kullanıcı adı boş olamaz!");
+                return;
+            }
 
-    fetch('/api/login', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({username: username})
-    })
-    .then(res => res.json())
-    .then(data => {
-        if(data.success) {
-            localStorage.setItem('noprof_user', data.username);
-            currentUser = data.username;
-            showApp();
-        } else {
-            alert(data.error || "Giriş başarısız.");
+            fetch('/api/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    localStorage.setItem('noprof_user', data.username);
+                    currentUser = data.username;
+                    showApp();
+                } else {
+                    alert(data.error || "Giriş başarısız.");
+                }
+            })
+            .catch(err => {
+                console.error("Hata:", err);
+                alert("Sunucuya ulaşılamadı!");
+            });
         }
-    })
-    .catch(err => {
-        console.error("Hata:", err);
-        alert("Sunucuya ulaşılamadı!");
-    });
-}
 
         function showApp() {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
             loadMessages();
             loadFriends();
-            setInterval(loadMessages, 3000); // 3 saniyede bir mesajları tazele
+            setInterval(loadMessages, 3000);
         }
 
         function sendMessage() {
