@@ -10,10 +10,18 @@
             --border: #1a1a1a;
             --text: #ededed;
             --text-dim: #737373;
-            --accent: #ffffff;
         }
+
+        [data-theme="light"] {
+            --bg: #f4f4f5;
+            --surface: #ffffff;
+            --border: #e4e4e7;
+            --text: #09090b;
+            --text-dim: #71717a;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: monospace; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
+        body { font-family: monospace; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; transition: background 0.2s, color 0.2s; }
         .hidden { display: none !important; }
 
         /* Giriş Ekranı */
@@ -23,8 +31,9 @@
         button { background: var(--text); color: var(--bg); border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; font-family: monospace; }
         button:hover { opacity: 0.8; }
 
-        /* Dil Seçici (Sağ Üst) */
-        .lang-switcher { position: absolute; top: 20px; right: 20px; cursor: pointer; font-size: 20px; user-select: none; background: var(--surface); border: 1px solid var(--border); padding: 5px 10px; border-radius: 4px; }
+        /* Sağ Üst Araçlar (Dil ve Tema) */
+        .top-controls { position: absolute; top: 20px; right: 20px; display: flex; gap: 8px; }
+        .control-btn { cursor: pointer; font-size: 16px; user-select: none; background: var(--surface); border: 1px solid var(--border); padding: 6px 10px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
 
         /* Ana Uygulama */
         #app-screen { display: flex; width: 100%; height: 100%; position: relative; }
@@ -39,17 +48,21 @@
         .input-box input { flex: 1; text-align: left; }
 
         .friend-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 5px; }
-        .friend-item { font-size: 13px; color: var(--text-dim); padding: 4px 0; }
+        .friend-item { font-size: 13px; color: var(--text-dim); padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+        .friend-item:hover { background: var(--border); color: var(--text); }
 
         .settings-area { margin-top: auto; }
         .danger-btn { background: transparent; border: 1px solid #330000; color: #ff4444; width: 100%; padding: 8px; }
         .danger-btn:hover { background: #1a0000; }
     </style>
 </head>
-<body>
+<body data-theme="dark">
 
-    <!-- Dil Değiştirici Sağ Üst -->
-    <div class="lang-switcher" id="lang-btn" onclick="toggleLang()">🇹🇷</div>
+    <!-- Sağ Üst Kontroller -->
+    <div class="top-controls">
+        <div class="control-btn" id="theme-btn" onclick="toggleTheme()">🌙</div>
+        <div class="control-btn" id="lang-btn" onclick="toggleLang()">🇹🇷</div>
+    </div>
 
     <!-- GİRİŞ EKRANI -->
     <div id="login-screen">
@@ -75,7 +88,8 @@
 
         <div class="chat-area">
             <div id="chat-box"></div>
-            <div class="input-box">
+            <!-- Kimse seçili değilse mesaj yazma alanı tamamen gizlenir -->
+            <div class="input-box hidden" id="msg-container">
                 <input type="text" id="msg-input" placeholder="mesaj yaz..." onkeypress="if(event.key === 'Enter') sendMessage()">
                 <button id="txt-send-btn" onclick="sendMessage()">GÖNDER</button>
             </div>
@@ -85,6 +99,8 @@
     <script>
         let currentUser = localStorage.getItem('noprof_user');
         let currentLang = 'tr';
+        let currentTheme = 'dark';
+        let activeChat = null; // Seçili arkadaş / sohbet
 
         const texts = {
             tr: { loginBtn: "GİRİŞ", usernamePlaceholder: "kullanıcı adı...", friendsTitle: "ARKADAŞLAR", friendPlaceholder: "ekle...", resetBtn: "HESABI SİL", sendBtn: "GÖNDER", msgPlaceholder: "mesaj yaz..." },
@@ -95,6 +111,12 @@
             currentLang = currentLang === 'tr' ? 'en' : 'tr';
             document.getElementById('lang-btn').innerText = currentLang === 'tr' ? '🇹🇷' : '🇬🇧';
             updateTexts();
+        }
+
+        function toggleTheme() {
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.body.setAttribute('data-theme', currentTheme);
+            document.getElementById('theme-btn').innerText = currentTheme === 'dark' ? '🌙' : '☀️';
         }
 
         function updateTexts() {
@@ -137,11 +159,16 @@
             setInterval(loadMessages, 3000);
         }
 
+        function selectChat(username) {
+            activeChat = username;
+            document.getElementById('msg-container').classList.remove('hidden');
+            loadMessages();
+        }
+
         function sendMessage() {
             const message = document.getElementById('msg-input').value.trim();
             if(!message) return;
 
-            // Önce kutuyu temizle ve mesajı anında ekranda göster (hızlı tepki için)
             document.getElementById('msg-input').value = '';
 
             fetch('/api/messages', {
@@ -191,7 +218,7 @@
             .then(data => {
                 if(data.success) {
                     const box = document.getElementById('friend-box');
-                    box.innerHTML = data.friends.map(f => `<div class="friend-item">@${f}</div>`).join('');
+                    box.innerHTML = data.friends.map(f => `<div class="friend-item" onclick="selectChat('${f}')">@${f}</div>`).join('');
                 }
             });
         }
