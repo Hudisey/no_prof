@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify, render_template_string
 
 app = Flask(__name__)
 
-# Render worker'lar arası en kararlı hafif paylaşımlı yapı
 users_db = {}
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -82,6 +81,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <script>
         let currentUser = localStorage.getItem('noprof_user');
         let isTr = true;
+
         function login() {
             const usernameInput = document.getElementById('username-input').value.trim();
             if(!usernameInput) return;
@@ -97,6 +97,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 loadData();
             });
         }
+
         function toggleLang() {
             isTr = !isTr;
             document.getElementById('sidebar-title').innerText = isTr ? "SOHBETLER" : "CHATS";
@@ -104,16 +105,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             document.getElementById('friend-input').placeholder = isTr ? "Arkadaş ekle..." : "Add friend...";
             loadData();
         }
+
         function toggleTheme() {
             const current = document.body.getAttribute('data-theme');
             document.body.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
         }
+
         function toggleSettings() { document.getElementById('settings-menu').classList.toggle('hidden'); }
         function toggleRequests() { document.getElementById('requests-dropdown').classList.toggle('hidden'); }
         
         async function sendFriendRequest() {
             const friend_username = document.getElementById('friend-input').value.trim();
             if(!friend_username) return;
+            if(!currentUser) {
+                currentUser = localStorage.getItem('noprof_user');
+            }
             
             const res = await fetch('/api/friend-request', {
                 method: 'POST',
@@ -186,11 +192,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 }
             } catch(e) {}
         }
+
         function sendMessage() {
             const msg = document.getElementById('msg-input').value.trim();
             if(!msg) return;
             document.getElementById('msg-input').value = '';
         }
+
         if(currentUser) {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
