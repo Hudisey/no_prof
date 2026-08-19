@@ -22,7 +22,7 @@ def init_db():
     with app.app_context():
         db = get_db()
         db.execute("""CREATE TABLE IF NOT EXISTS users 
-                      (username TEXT PRIMARY KEY)""")
+                      (username TEXT PRIMARY KEY, avatar TEXT)""")
         db.execute("""CREATE TABLE IF NOT EXISTS messages 
                       (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, friend_username TEXT, message TEXT)""")
         db.execute("""CREATE TABLE IF NOT EXISTS friends 
@@ -43,9 +43,25 @@ def login():
         return jsonify({"success": False, "error": "Kullanıcı adı boş olamaz!"})
 
     db = get_db()
-    db.execute("INSERT OR IGNORE INTO users (username) VALUES (?)", (username,))
+    # Kullanıcı yoksa varsayılan avatar ile oluştur, varsa güncelleme yapma
+    db.execute("INSERT OR IGNORE INTO users (username, avatar) VALUES (?, ?)", 
+               (username, "https://api.dicebear.com/7.x/identicon/svg?seed=" + username))
     db.commit()
-    return jsonify({"success": True, "username": username})
+    
+    user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    return jsonify({"success": True, "username": user["username"], "avatar": user["avatar"]})
+
+@app.route("/api/avatar", methods=["POST"])
+def update_avatar():
+    data = request.get_json(silent=True) or {}
+    username = data.get("username")
+    avatar = data.get("avatar", "").strip()
+    if username and avatar:
+        db = get_db()
+        db.execute("UPDATE users SET avatar = ? WHERE username = ?", (avatar, username))
+        db.commit()
+        return jsonify({"success": True})
+    return jsonify({"success": False})
 
 @app.route("/api/friends", methods=["GET", "POST"])
 def handle_friends():
@@ -62,7 +78,6 @@ def handle_friends():
         if not user_check:
             return jsonify({"success": False, "error": "Böyle bir kullanıcı yok!"})
 
-        # Zaten ekli mi kontrol et
         existing = db.execute("SELECT * FROM friends WHERE username = ? AND friend_username = ?", (username, friend_username)).fetchone()
         if not existing:
             db.execute("INSERT INTO friends (username, friend_username) VALUES (?, ?)", (username, friend_username))
@@ -71,8 +86,13 @@ def handle_friends():
         return jsonify({"success": True})
     else:
         username = request.args.get("username")
-        cursor = db.execute("SELECT friend_username FROM friends WHERE username = ?", (username,))
-        friends = [row["friend_username"] for row in cursor.fetchall()]
+        cursor = db.execute("""
+            SELECT f.friend_username, u.avatar 
+            FROM friends f 
+            LEFT JOIN users u ON f.friend_username = u.username 
+            WHERE f.username = ?
+        """, (username,))
+        friends = [{"friend_username": row["friend_username"], "avatar": row["avatar"] or ""} for row in cursor.fetchall()]
         return jsonify({"success": True, "friends": friends})
 
 @app.route("/api/messages", methods=["GET", "POST"])
@@ -94,11 +114,13 @@ def handle_messages():
     else:
         username = request.args.get("username")
         friend_username = request.args.get("friend_username")
-        cursor = db.execute(
-            "SELECT username, message FROM messages WHERE (username = ? AND friend_username = ?) OR (username = ? AND friend_username = ?)",
-            (username, friend_username, friend_username, username)
-        )
-        messages = [{"username": row["username"], "message": row["message"]} for row in cursor.fetchall()]
+        cursor = db.execute("""
+            SELECT m.username, m.message, u.avatar 
+            FROM messages m 
+            LEFT JOIN users u ON m.username = u.username 
+            WHERE (m.username = ? AND m.friend_username = ?) OR (m.username = ? AND m.friend_username = ?)
+        """, (username, friend_username, friend_username, username))
+        messages = [{"username": row["username"], "message": row["message"], "avatar": row["avatar"]} for row in cursor.fetchall()]
         return jsonify({"success": True, "messages": messages})
 
 @app.route("/api/reset", methods=["POST"])
