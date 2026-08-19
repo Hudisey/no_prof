@@ -2,8 +2,11 @@ import os
 import sqlite3
 from flask import Flask, g, jsonify, render_template, request
 
-app = Flask(__name__)
+# Burayı değiştiriyoruz:
+app = Flask(__name__, template_folder='.') # . işareti "HTML dosyası aynı klasörde" demek
 DATABASE = "noprof.db"
+
+# Geri kalan kodların aynı şekilde aynen kalsın...
 
 
 def get_db():
