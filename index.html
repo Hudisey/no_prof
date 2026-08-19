@@ -24,10 +24,12 @@
         #chat-box { flex: 1; padding: 20px; overflow-y: auto; }
         .msg-input-area { padding: 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
 
-        /* Dropdown & Menüler */
+        /* Dropdown & Bildirim İkonu */
         #requests-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
         .req-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
-        
+        .bell-container { position: relative; display: inline-block; }
+        .discord-badge { background: #ed4245; color: white; font-size: 9px; width: 15px; height: 15px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: absolute; top: -4px; right: -4px; font-weight: bold; }
+
         /* Smooth Ayarlar Menüsü */
         #settings-menu { 
             position: absolute; bottom: 65px; left: 15px; right: 15px; 
@@ -65,14 +67,16 @@
     <div id="app-screen" class="hidden">
         <div class="sidebar">
             <div style="display:flex; justify-content:space-between; align-items: center;">
-                <h3 style="font-size: 14px;">SOHBETLER</h3>
-                <button onclick="toggleLang()" id="lang-btn" style="padding: 4px 8px; font-size: 11px;">TR</button>
+                <h3 id="sidebar-title" style="font-size: 14px;">SOHBETLER</h3>
             </div>
             
             <div style="display: flex; gap: 5px;">
                 <input type="text" id="friend-input" placeholder="Arkadaş ekle..." style="flex:1;">
                 <button onclick="sendFriendRequest()">+</button>
-                <button onclick="toggleRequests()">🔔</button>
+                <div class="bell-container">
+                    <button onclick="toggleRequests()">🔔</button>
+                    <span id="req-badge" class="discord-badge hidden">0</span>
+                </div>
             </div>
             
             <!-- İstekler Kutusu -->
@@ -86,11 +90,11 @@
             <!-- AYARLAR BUTONU -->
             <button onclick="toggleSettings()" class="settings-btn" style="justify-content: center; font-weight: bold;">⚙️ AYARLAR</button>
             
-            <!-- AYARLAR MENÜSÜ (Alt alta, aynı hizada, özel sembollü) -->
+            <!-- AYARLAR MENÜSÜ -->
             <div id="settings-menu" class="hidden">
                 <button onclick="toggleTheme()" class="settings-btn">🌓 Tema Değiştir</button>
-                <button onclick="toggleLang()" class="settings-btn">🌍 Dil Değiştir (Language)</button>
-                <button onclick="document.getElementById('avatar-input').click()" class="settings-btn">🖼️ Profil Ekle / Değiştir / Sil</button>
+                <button onclick="toggleLang()" class="settings-btn">🌍 Dil Değiştir (TR/EN)</button>
+                <button onclick="document.getElementById('avatar-input').click()" class="settings-btn">🖼️ Profil Ekle/Değiştir</button>
                 <button onclick="deleteAccount()" class="settings-btn danger">❌ Hesabı Sil</button>
                 <input type="file" id="avatar-input" class="hidden" onchange="uploadAvatar(this)">
             </div>
@@ -128,8 +132,10 @@
 
         function toggleLang() {
             isTr = !isTr;
-            document.getElementById('lang-btn').innerText = isTr ? "TR" : "EN";
+            document.getElementById('sidebar-title').innerText = isTr ? "SOHBETLER" : "CHATS";
             document.getElementById('req-title').innerText = isTr ? "GELEN İSTEKLER" : "FRIEND REQUESTS";
+            document.getElementById('friend-input').placeholder = isTr ? "Arkadaş ekle..." : "Add friend...";
+            loadData();
         }
 
         function toggleTheme() {
@@ -196,8 +202,11 @@
                 const reqRes = await fetch(`/api/friend-request?username=${encodeURIComponent(currentUser)}`);
                 const data = await reqRes.json();
                 const reqList = document.getElementById('requests-list');
+                const badge = document.getElementById('req-badge');
                 
                 if (data.pending && data.pending.length > 0) {
+                    badge.classList.remove('hidden');
+                    badge.innerText = data.pending.length;
                     reqList.innerHTML = data.pending.map(p => `
                         <div class="req-item">
                             <span style="font-weight:bold;">${p.username}</span>
@@ -208,6 +217,7 @@
                         </div>
                     `).join('');
                 } else {
+                    badge.classList.add('hidden');
                     reqList.innerHTML = `<div style="font-size:11px; color:#737373; text-align:center; padding: 6px;">${isTr ? 'İstek yok.' : 'No requests.'}</div>`;
                 }
             } catch(e) {
@@ -218,7 +228,6 @@
         function sendMessage() {
             const msg = document.getElementById('msg-input').value.trim();
             if(!msg) return;
-            // Mesaj gönderme mantığı burada devam ediyor...
             document.getElementById('msg-input').value = '';
         }
 
