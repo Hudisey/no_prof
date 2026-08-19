@@ -4,57 +4,94 @@
     <meta charset="UTF-8">
     <title>NOPROF | SOHBET</title>
     <style>
-        :root { --bg: #000; --surface: #111; --border: #222; --text: #eee; --accent: #333; }
-        [data-theme="light"] { --bg: #f4f4f4; --surface: #fff; --border: #ddd; --text: #111; --accent: #eee; }
-        body { background: var(--bg); color: var(--text); font-family: monospace; height: 100vh; display: flex; overflow: hidden; transition: 0.3s; }
-        .sidebar { width: 300px; background: var(--surface); border-right: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        :root { --bg: #000; --surface: #111; --border: #222; --text: #eee; --accent: #222; --accent-hover: #333; }
+        [data-theme="light"] { --bg: #f4f4f4; --surface: #fff; --border: #ddd; --text: #111; --accent: #e4e4e4; --accent-hover: #d4d4d4; }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; transition: background 0.2s ease, color 0.2s ease, border 0.2s ease, transform 0.1s ease; }
+        body { background: var(--bg); color: var(--text); font-family: monospace; height: 100vh; display: flex; overflow: hidden; }
+        
+        .hidden { display: none !important; }
+
+        /* Giriş Ekranı */
+        #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; height: 100%; gap: 12px; }
+        .logo-title { font-size: 32px; font-weight: bold; letter-spacing: 2px; }
+        .logo-subtitle { font-size: 11px; color: #737373; margin-top: -8px; }
+
+        /* Arayüz */
+        #app-screen { display: flex; width: 100%; height: 100%; }
+        .sidebar { width: 300px; background: var(--surface); border-right: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 10px; position: relative; }
         .chat-main { flex: 1; display: flex; flex-direction: column; }
         #chat-box { flex: 1; padding: 20px; overflow-y: auto; }
         .msg-input-area { padding: 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
+
+        /* Dropdown & Menüler */
+        #requests-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .req-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
         
-        #requests-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: var(--surface); border: 1px solid var(--border); padding: 10px; z-index: 100; }
-        .req-item { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
-        
-        /* Ayarlar Menüsü */
-        #settings-menu { position: absolute; bottom: 60px; left: 15px; background: var(--surface); border: 1px solid var(--border); padding: 10px; border-radius: 5px; z-index: 100; }
-        
-        input, button { background: var(--accent); border: 1px solid var(--border); color: var(--text); padding: 8px; border-radius: 5px; cursor: pointer; }
-        .hidden { display: none !important; }
+        /* Smooth Ayarlar Menüsü */
+        #settings-menu { 
+            position: absolute; bottom: 65px; left: 15px; right: 15px; 
+            background: var(--surface); border: 1px solid var(--border); 
+            border-radius: 10px; padding: 10px; z-index: 100; 
+            display: flex; flex-direction: column; gap: 6px; 
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        }
+        .settings-btn {
+            background: var(--accent); border: 1px solid var(--border); color: var(--text); 
+            padding: 8px 12px; border-radius: 6px; cursor: pointer; text-align: left; 
+            font-family: monospace; font-size: 12px; display: flex; align-items: center; gap: 8px;
+        }
+        .settings-btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+        .settings-btn.danger { color: #ed4245; border-color: rgba(237,66,69,0.3); }
+        .settings-btn.danger:hover { background: rgba(237,66,69,0.1); }
+
+        input, button { background: var(--accent); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-family: monospace; cursor: pointer; }
+        input:focus { outline: none; border-color: #555; }
+        button:hover { background: var(--accent-hover); }
+        button:active { transform: scale(0.98); }
     </style>
 </head>
 <body data-theme="dark">
 
-    <div id="login-screen" style="margin: auto; display: flex; flex-direction: column; gap: 10px;">
-        <input type="text" id="username-input" placeholder="Kullanıcı Adı">
-        <button onclick="login()">GİRİŞ YAP</button>
+    <!-- GİRİŞ EKRANI -->
+    <div id="login-screen">
+        <div class="logo-title">NOPROF</div>
+        <div class="logo-subtitle">(made by hudisey)</div>
+        <input type="text" id="username-input" placeholder="Kullanıcı adı..." style="width: 220px; margin-top: 10px;">
+        <button onclick="login()" style="width: 220px;">GİRİŞ YAP</button>
     </div>
 
-    <div id="app-screen" class="hidden" style="display: flex; width: 100%;">
+    <!-- ANA EKRAN -->
+    <div id="app-screen" class="hidden">
         <div class="sidebar">
-            <div style="display:flex; justify-content:space-between;">
-                <h3>SOHBETLER</h3>
-                <button onclick="toggleLang()" id="lang-btn">TR</button>
+            <div style="display:flex; justify-content:space-between; align-items: center;">
+                <h3 style="font-size: 14px;">SOHBETLER</h3>
+                <button onclick="toggleLang()" id="lang-btn" style="padding: 4px 8px; font-size: 11px;">TR</button>
             </div>
             
             <div style="display: flex; gap: 5px;">
-                <input type="text" id="friend-input" placeholder="Arkadaş Ekle...">
+                <input type="text" id="friend-input" placeholder="Arkadaş ekle..." style="flex:1;">
                 <button onclick="sendFriendRequest()">+</button>
                 <button onclick="toggleRequests()">🔔</button>
             </div>
             
+            <!-- İstekler Kutusu -->
             <div id="requests-dropdown" class="hidden">
-                <div id="req-title" style="font-size: 10px; color: #888;">GELEN İSTEKLER</div>
+                <div id="req-title" style="font-size: 10px; color: #888; margin-bottom: 6px;">GELEN İSTEKLER</div>
                 <div id="requests-list"></div>
             </div>
 
-            <div id="friend-box" style="flex:1;"></div>
+            <div id="friend-box" style="flex:1; overflow-y: auto; margin-top: 5px;"></div>
 
-            <!-- Ayarlar -->
-            <button onclick="toggleSettings()">⚙️ AYARLAR</button>
+            <!-- AYARLAR BUTONU -->
+            <button onclick="toggleSettings()" class="settings-btn" style="justify-content: center; font-weight: bold;">⚙️ AYARLAR</button>
+            
+            <!-- AYARLAR MENÜSÜ (Alt alta, aynı hizada, özel sembollü) -->
             <div id="settings-menu" class="hidden">
-                <button onclick="toggleTheme()">🌓 Tema Değiştir</button><br><br>
-                <button onclick="document.getElementById('avatar-input').click()">🖼️ Profil Resmi Ekle</button><br><br>
-                <button onclick="deleteAccount()" style="color:red;">❌ HESABI SİL</button>
+                <button onclick="toggleTheme()" class="settings-btn">🌓 Tema Değiştir</button>
+                <button onclick="toggleLang()" class="settings-btn">🌍 Dil Değiştir (Language)</button>
+                <button onclick="document.getElementById('avatar-input').click()" class="settings-btn">🖼️ Profil Ekle / Değiştir / Sil</button>
+                <button onclick="deleteAccount()" class="settings-btn danger">❌ Hesabı Sil</button>
                 <input type="file" id="avatar-input" class="hidden" onchange="uploadAvatar(this)">
             </div>
         </div>
@@ -62,7 +99,7 @@
         <div class="chat-main">
             <div id="chat-box"></div>
             <div class="msg-input-area">
-                <input type="text" id="msg-input" style="flex:1" placeholder="Mesaj...">
+                <input type="text" id="msg-input" style="flex:1" placeholder="Mesaj yaz...">
                 <button onclick="sendMessage()">GÖNDER</button>
             </div>
         </div>
@@ -73,11 +110,20 @@
         let isTr = true;
 
         function login() {
-            currentUser = document.getElementById('username-input').value;
-            localStorage.setItem('noprof_user', currentUser);
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('app-screen').classList.remove('hidden');
-            loadData();
+            const usernameInput = document.getElementById('username-input').value.trim();
+            if(!usernameInput) return;
+            
+            fetch('/api/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: usernameInput})
+            }).then(r => r.json()).then(data => {
+                currentUser = data.username || usernameInput;
+                localStorage.setItem('noprof_user', currentUser);
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('app-screen').classList.remove('hidden');
+                loadData();
+            });
         }
 
         function toggleLang() {
@@ -88,15 +134,42 @@
 
         function toggleTheme() {
             const current = document.body.getAttribute('data-theme');
-            const next = current === 'dark' ? 'light' : 'dark';
-            document.body.setAttribute('data-theme', next);
+            document.body.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
         }
 
         function toggleSettings() { document.getElementById('settings-menu').classList.toggle('hidden'); }
         function toggleRequests() { document.getElementById('requests-dropdown').classList.toggle('hidden'); }
 
+        async function sendFriendRequest() {
+            const friend_username = document.getElementById('friend-input').value.trim();
+            if(!friend_username) return;
+            
+            const res = await fetch('/api/friend-request', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: currentUser, friend_username})
+            });
+            
+            if(res.ok) {
+                alert(isTr ? "İstek başarıyla gönderildi!" : "Request sent successfully!");
+                document.getElementById('friend-input').value = '';
+            } else {
+                alert(isTr ? "İstek gönderilemedi!" : "Failed to send request!");
+            }
+        }
+
+        async function respondRequest(friend_username, action) {
+            await fetch('/api/friend-action', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: currentUser, friend_username, action})
+            });
+            loadData();
+        }
+
         async function uploadAvatar(input) {
             const file = input.files[0];
+            if(!file) return;
             const reader = new FileReader();
             reader.onload = async (e) => {
                 await fetch('/api/avatar', {
@@ -104,13 +177,13 @@
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({username: currentUser, avatar: e.target.result})
                 });
-                alert("Avatar güncellendi!");
+                alert(isTr ? "Profil güncellendi!" : "Profile updated!");
             };
             reader.readAsDataURL(file);
         }
 
         async function deleteAccount() {
-            if(confirm("Emin misin?")) {
+            if(confirm(isTr ? "Hesabını silmek istediğine emin misin?" : "Are you sure you want to delete your account?")) {
                 await fetch('/api/reset', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({username: currentUser})});
                 localStorage.removeItem('noprof_user');
                 location.reload();
@@ -118,28 +191,42 @@
         }
 
         async function loadData() {
-            const reqRes = await fetch(`/api/friend-request?username=${currentUser}`);
-            const data = await reqRes.json();
-            const reqList = document.getElementById('requests-list');
-            
-            if (data.pending && data.pending.length > 0) {
-                reqList.innerHTML = data.pending.map(p => `
-                    <div class="req-item">
-                        <span>${p.username}</span>
-                        <button onclick="respondRequest('${p.username}', 'accept')">✓</button>
-                    </div>
-                `).join('');
-            } else {
-                reqList.innerHTML = `<div style="font-size:10px; color:#555;">${isTr ? 'İstek yok.' : 'No requests.'}</div>`;
+            if(!currentUser) return;
+            try {
+                const reqRes = await fetch(`/api/friend-request?username=${encodeURIComponent(currentUser)}`);
+                const data = await reqRes.json();
+                const reqList = document.getElementById('requests-list');
+                
+                if (data.pending && data.pending.length > 0) {
+                    reqList.innerHTML = data.pending.map(p => `
+                        <div class="req-item">
+                            <span style="font-weight:bold;">${p.username}</span>
+                            <div style="display:flex; gap:4px;">
+                                <button onclick="respondRequest('${p.username}', 'accept')" style="padding:2px 6px; font-size:11px;">✓</button>
+                                <button onclick="respondRequest('${p.username}', 'reject')" style="padding:2px 6px; font-size:11px; color:#ed4245;">✕</button>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    reqList.innerHTML = `<div style="font-size:11px; color:#737373; text-align:center; padding: 6px;">${isTr ? 'İstek yok.' : 'No requests.'}</div>`;
+                }
+            } catch(e) {
+                console.error("Veri yüklenirken hata:", e);
             }
         }
 
-        // Diğer fonksiyonlar (sendFriendRequest, sendMessage vb.) aynı kalabilir...
+        function sendMessage() {
+            const msg = document.getElementById('msg-input').value.trim();
+            if(!msg) return;
+            // Mesaj gönderme mantığı burada devam ediyor...
+            document.getElementById('msg-input').value = '';
+        }
+
         if(currentUser) {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
             loadData();
-            setInterval(loadData, 5000);
+            setInterval(loadData, 4000);
         }
     </script>
 </body>
