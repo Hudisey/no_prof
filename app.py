@@ -19,18 +19,19 @@ def close_connection(exception):
         db.close()
 
 def init_db():
-    with app.app_context():
-        db = get_db()
-        db.execute("""CREATE TABLE IF NOT EXISTS users 
-                      (username TEXT PRIMARY KEY)""")
-        db.execute("""CREATE TABLE IF NOT EXISTS messages 
-                      (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, message TEXT)""")
-        db.execute("""CREATE TABLE IF NOT EXISTS friends 
-                      (username TEXT, friend_username TEXT)""")
-        db.commit()
+    db = get_db()
+    db.execute("""CREATE TABLE IF NOT EXISTS users 
+                  (username TEXT PRIMARY KEY)""")
+    db.execute("""CREATE TABLE IF NOT EXISTS messages 
+                  (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, message TEXT)""")
+    db.execute("""CREATE TABLE IF NOT EXISTS friends 
+                  (username TEXT, friend_username TEXT)""")
+    db.commit()
 
-# Gunicorn/Render doğrudan burayı okuduğu için veritabanı tabloları hemen oluşturulur!
-init_db()
+# Her istekten önce veritabanı tablolarının olduğundan emin oluyoruz (Yoksa otomatik kurar)
+@app.before_request
+def before_request():
+    init_db()
 
 @app.route("/")
 def index():
