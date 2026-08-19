@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Noprof</title>
+    <style>
+        body { font-family: monospace; background: #0b0f19; color: #e2e8f0; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        .hidden { display: none !important; }
+        
+        /* Giriş Ekranı */
+        #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; height: 100%; }
+        input, button { background: #1e293b; border: 1px solid #334155; color: white; padding: 10px; border-radius: 6px; outline: none; }
+        button { cursor: pointer; background: #3b82f6; border: none; font-weight: bold; }
+        button:hover { background: #2563eb; }
+
+        /* Ana Ekran */
+        #app-screen { display: flex; width: 100%; height: 100%; position: relative; }
+        .sidebar { width: 250px; background: #0f172a; border-right: 1px solid #1e293b; display: flex; flex-direction: column; padding: 15px; position: relative; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: #0b0f19; }
+        
+        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .message { background: #1e293b; padding: 8px 12px; border-radius: 6px; max-width: 70%; word-break: break-all; }
+        .input-box { display: flex; padding: 15px; background: #0f172a; border-top: 1px solid #1e293b; gap: 10px; }
+        .input-box input { flex: 1; }
+
+        /* Sol Alt Ayarlar Butonu */
+        .settings-area { margin-top: auto; padding-top: 10px; border-top: 1px solid #1e293b; }
+        .danger-btn { background: #ef4444; width: 100%; }
+        .danger-btn:hover { background: #dc2626; }
+
+        .friend-list { margin-top: 15px; overflow-y: auto; flex: 1; }
+        .friend-item { padding: 5px 0; color: #94a3b8; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <!-- GİRİŞ EKRANI -->
+    <div id="login-screen">
+        <h2>NOPROF</h2>
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="username-input" placeholder="Kullanıcı adı...">
+            <button onclick="login()">Giriş Yap</button>
+        </div>
+    </div>
+
+    <!-- ANA UYGULAMA EKRANI -->
+    <div id="app-screen" class="hidden">
+        <div class="sidebar">
+            <h3>Arkadaşlar</h3>
+            <div style="display: flex; gap: 5px;">
+                <input type="text" id="friend-input" placeholder="Kullanıcı adı" style="font-size: 12px;">
+                <button onclick="addFriend()" style="font-size: 12px;">Ekle</button>
+            </div>
+            <div class="friend-list" id="friend-box"></div>
+
+            <!-- Sol Alt Ayarlar -->
+            <div class="settings-area">
+                <button class="danger-btn" onclick="resetAccount()">Hesabı & Her Şeyi Sil</button>
+            </div>
+        </div>
+
+        <div class="chat-area">
+            <div id="chat-box"></div>
+            <div class="input-box">
+                <input type="text" id="msg-input" placeholder="Mesaj yaz..." onkeypress="if(event.key === 'Enter') sendMessage()">
+                <button onclick="sendMessage()">Gönder</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = localStorage.getItem('noprof_user');
+
+        if(currentUser) {
+            showApp();
+        }
+
+        function login() {
+            const username = document.getElementById('username-input').value.trim();
+            if(!username) return;
+
+            fetch('/api/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    localStorage.setItem('noprof_user', data.username);
+                    currentUser = data.username;
+                    showApp();
+                }
+            });
+        }
+
+        function showApp() {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app-screen').classList.remove('hidden');
+            loadMessages();
+            loadFriends();
+            setInterval(loadMessages, 3000); // 3 saniyede bir mesajları tazele
+        }
+
+        function sendMessage() {
+            const message = document.getElementById('msg-input').value.trim();
+            if(!message) return;
+
+            fetch('/api/messages', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: currentUser, message})
+            }).then(() => {
+                document.getElementById('msg-input').value = '';
+                loadMessages();
+            });
+        }
+
+        function loadMessages() {
+            fetch('/api/messages')
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    const box = document.getElementById('chat-box');
+                    box.innerHTML = data.messages.map(m => `<div class="message"><b>${m.username}:</b> ${m.message}</div>`).join('');
+                    box.scrollTop = box.scrollHeight;
+                }
+            });
+        }
+
+        function addFriend() {
+            const friend_username = document.getElementById('friend-input').value.trim();
+            if(!friend_username) return;
+
+            fetch('/api/friends', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: currentUser, friend_username})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    document.getElementById('friend-input').value = '';
+                    loadFriends();
+                } else {
+                    alert(data.error);
+                }
+            });
+        }
+
+        function loadFriends() {
+            fetch(`/api/friends?username=${currentUser}`)
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    const box = document.getElementById('friend-box');
+                    box.innerHTML = data.friends.map(f => `<div class="friend-item">@${f}</div>`).join('');
+                }
+            });
+        }
+
+        function resetAccount() {
+            if(!confirm("Hesabın, mesajların ve arkadaşların tamamen silinecek. Emin misin?")) return;
+
+            fetch('/api/reset', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: currentUser})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    localStorage.removeItem('noprof_user');
+                    location.reload();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
