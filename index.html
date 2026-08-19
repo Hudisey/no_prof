@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>NOPROF | SOHBET</title>
+    <title>NOPROF</title>
     <style>
         :root { --bg: #000; --surface: #111; --border: #222; --text: #eee; --accent: #222; --accent-hover: #333; }
         [data-theme="light"] { --bg: #f4f4f4; --surface: #fff; --border: #ddd; --text: #111; --accent: #e4e4e4; --accent-hover: #d4d4d4; }
@@ -150,12 +150,17 @@
             const friend_username = document.getElementById('friend-input').value.trim();
             if(!friend_username) return;
             
+            console.log("İstek gönderiliyor -> Gönderen:", currentUser, "Hedef:", friend_username);
+
             const res = await fetch('/api/friend-request', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username: currentUser, friend_username})
             });
             
+            const resData = await res.json();
+            console.log("İstek gönderme yanıtı:", resData);
+
             if(res.ok) {
                 alert(isTr ? "İstek başarıyla gönderildi!" : "Request sent successfully!");
                 document.getElementById('friend-input').value = '';
@@ -201,6 +206,8 @@
             try {
                 const reqRes = await fetch(`/api/friend-request?username=${encodeURIComponent(currentUser)}`);
                 const data = await reqRes.json();
+                console.log("Gelen veri çekildi (loadData):", data);
+
                 const reqList = document.getElementById('requests-list');
                 const badge = document.getElementById('req-badge');
                 
