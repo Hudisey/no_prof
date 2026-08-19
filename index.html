@@ -2,83 +2,117 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Noprof</title>
+    <title>NOPROF</title>
     <style>
-        body { font-family: monospace; background: #0b0f19; color: #e2e8f0; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        :root {
+            --bg: #000000;
+            --surface: #0a0a0a;
+            --border: #1a1a1a;
+            --text: #ededed;
+            --text-dim: #737373;
+            --accent: #ffffff;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: monospace; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
         .hidden { display: none !important; }
-        
+
         /* Giriş Ekranı */
-        #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; height: 100%; }
-        input, button { background: #1e293b; border: 1px solid #334155; color: white; padding: 10px; border-radius: 6px; outline: none; }
-        button { cursor: pointer; background: #3b82f6; border: none; font-weight: bold; }
-        button:hover { background: #2563eb; }
+        #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; height: 100%; gap: 15px; }
+        input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 12px; border-radius: 4px; outline: none; font-family: monospace; width: 240px; text-align: center; }
+        input:focus { border-color: var(--text-dim); }
+        button { background: var(--text); color: var(--bg); border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; font-family: monospace; }
+        button:hover { opacity: 0.8; }
 
-        /* Ana Ekran */
+        /* Dil Seçici (Sağ Üst) */
+        .lang-switcher { position: absolute; top: 20px; right: 20px; cursor: pointer; font-size: 20px; user-select: none; background: var(--surface); border: 1px solid var(--border); padding: 5px 10px; border-radius: 4px; }
+
+        /* Ana Uygulama */
         #app-screen { display: flex; width: 100%; height: 100%; position: relative; }
-        .sidebar { width: 250px; background: #0f172a; border-right: 1px solid #1e293b; display: flex; flex-direction: column; padding: 15px; position: relative; }
-        .chat-area { flex: 1; display: flex; flex-direction: column; background: #0b0f19; }
+        .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 15px; gap: 15px; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
         
-        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-        .message { background: #1e293b; padding: 8px 12px; border-radius: 6px; max-width: 70%; word-break: break-all; }
-        .input-box { display: flex; padding: 15px; background: #0f172a; border-top: 1px solid #1e293b; gap: 10px; }
-        .input-box input { flex: 1; }
+        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+        .message { background: var(--surface); border: 1px solid var(--border); padding: 10px; border-radius: 4px; max-width: 60%; word-break: break-all; font-size: 13px; }
+        .message b { color: var(--text-dim); margin-right: 8px; }
 
-        .settings-area { margin-top: auto; padding-top: 10px; border-top: 1px solid #1e293b; }
-        .danger-btn { background: #ef4444; width: 100%; }
-        .danger-btn:hover { background: #dc2626; }
+        .input-box { display: flex; padding: 15px; background: var(--surface); border-top: 1px solid var(--border); gap: 10px; }
+        .input-box input { flex: 1; text-align: left; }
 
-        .friend-list { margin-top: 15px; overflow-y: auto; flex: 1; }
-        .friend-item { padding: 5px 0; color: #94a3b8; font-size: 14px; }
+        .friend-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+        .friend-item { font-size: 13px; color: var(--text-dim); padding: 4px 0; }
+
+        .settings-area { margin-top: auto; }
+        .danger-btn { background: transparent; border: 1px solid #330000; color: #ff4444; width: 100%; padding: 8px; }
+        .danger-btn:hover { background: #1a0000; }
     </style>
 </head>
 <body>
 
+    <!-- Dil Değiştirici Sağ Üst -->
+    <div class="lang-switcher" id="lang-btn" onclick="toggleLang()">🇹🇷</div>
+
     <!-- GİRİŞ EKRANI -->
     <div id="login-screen">
-        <h2>NOPROF</h2>
-        <div style="display: flex; gap: 10px;">
-            <input type="text" id="username-input" placeholder="Kullanıcı adı...">
-            <button onclick="login()">Giriş Yap</button>
-        </div>
+        <h2 id="txt-title" style="letter-spacing: 2px;">NOPROF</h2>
+        <input type="text" id="username-input" placeholder="kullanıcı adı...">
+        <button id="txt-login-btn" onclick="login()">GİRİŞ</button>
     </div>
 
-    <!-- ANA UYGULAMA EKRANI -->
+    <!-- ANA EKRAN -->
     <div id="app-screen" class="hidden">
         <div class="sidebar">
-            <h3>Arkadaşlar</h3>
+            <h3 id="txt-friends-title" style="font-size: 12px; color: var(--text-dim);">ARKADAŞLAR</h3>
             <div style="display: flex; gap: 5px;">
-                <input type="text" id="friend-input" placeholder="Kullanıcı adı" style="font-size: 12px;">
-                <button onclick="addFriend()" style="font-size: 12px;">Ekle</button>
+                <input type="text" id="friend-input" placeholder="ekle..." style="width: 100%; padding: 8px; font-size: 12px;">
+                <button onclick="addFriend()" style="padding: 8px 12px; font-size: 12px;">+</button>
             </div>
             <div class="friend-list" id="friend-box"></div>
 
             <div class="settings-area">
-                <button class="danger-btn" onclick="resetAccount()">Hesabı & Her Şeyi Sil</button>
+                <button class="danger-btn" id="txt-reset-btn" onclick="resetAccount()">HESABI SİL</button>
             </div>
         </div>
 
         <div class="chat-area">
             <div id="chat-box"></div>
             <div class="input-box">
-                <input type="text" id="msg-input" placeholder="Mesaj yaz..." onkeypress="if(event.key === 'Enter') sendMessage()">
-                <button onclick="sendMessage()">Gönder</button>
+                <input type="text" id="msg-input" placeholder="mesaj yaz..." onkeypress="if(event.key === 'Enter') sendMessage()">
+                <button id="txt-send-btn" onclick="sendMessage()">GÖNDER</button>
             </div>
         </div>
     </div>
 
     <script>
         let currentUser = localStorage.getItem('noprof_user');
+        let currentLang = 'tr';
 
-        if(currentUser) {
-            showApp();
+        const texts = {
+            tr: { loginBtn: "GİRİŞ", usernamePlaceholder: "kullanıcı adı...", friendsTitle: "ARKADAŞLAR", friendPlaceholder: "ekle...", resetBtn: "HESABI SİL", sendBtn: "GÖNDER", msgPlaceholder: "mesaj yaz..." },
+            en: { loginBtn: "LOGIN", usernamePlaceholder: "username...", friendsTitle: "FRIENDS", friendPlaceholder: "add...", resetBtn: "DELETE ACCOUNT", sendBtn: "SEND", msgPlaceholder: "type a message..." }
+        };
+
+        function toggleLang() {
+            currentLang = currentLang === 'tr' ? 'en' : 'tr';
+            document.getElementById('lang-btn').innerText = currentLang === 'tr' ? '🇹🇷' : '🇬🇧';
+            updateTexts();
         }
+
+        function updateTexts() {
+            const t = texts[currentLang];
+            document.getElementById('txt-login-btn').innerText = t.loginBtn;
+            document.getElementById('username-input').placeholder = t.usernamePlaceholder;
+            document.getElementById('txt-friends-title').innerText = t.friendsTitle;
+            document.getElementById('friend-input').placeholder = t.friendPlaceholder;
+            document.getElementById('txt-reset-btn').innerText = t.resetBtn;
+            document.getElementById('txt-send-btn').innerText = t.sendBtn;
+            document.getElementById('msg-input').placeholder = t.msgPlaceholder;
+        }
+
+        if(currentUser) { showApp(); }
 
         function login() {
             const username = document.getElementById('username-input').value.trim();
-            if(!username) {
-                alert("Kullanıcı adı boş olamaz!");
-                return;
-            }
+            if(!username) return;
 
             fetch('/api/login', {
                 method: 'POST',
@@ -91,13 +125,7 @@
                     localStorage.setItem('noprof_user', data.username);
                     currentUser = data.username;
                     showApp();
-                } else {
-                    alert(data.error || "Giriş başarısız.");
                 }
-            })
-            .catch(err => {
-                console.error("Hata:", err);
-                alert("Sunucuya ulaşılamadı!");
             });
         }
 
@@ -113,12 +141,14 @@
             const message = document.getElementById('msg-input').value.trim();
             if(!message) return;
 
+            // Önce kutuyu temizle ve mesajı anında ekranda göster (hızlı tepki için)
+            document.getElementById('msg-input').value = '';
+
             fetch('/api/messages', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username: currentUser, message})
             }).then(() => {
-                document.getElementById('msg-input').value = '';
                 loadMessages();
             });
         }
@@ -129,7 +159,7 @@
             .then(data => {
                 if(data.success) {
                     const box = document.getElementById('chat-box');
-                    box.innerHTML = data.messages.map(m => `<div class="message"><b>${m.username}:</b> ${m.message}</div>`).join('');
+                    box.innerHTML = data.messages.map(m => `<div class="message"><b>${m.username}</b>${m.message}</div>`).join('');
                     box.scrollTop = box.scrollHeight;
                 }
             });
@@ -167,19 +197,14 @@
         }
 
         function resetAccount() {
-            if(!confirm("Hesabın, mesajların ve arkadaşların tamamen silinecek. Emin misin?")) return;
-
+            if(!confirm("Emin misin?")) return;
             fetch('/api/reset', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username: currentUser})
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.success) {
-                    localStorage.removeItem('noprof_user');
-                    location.reload();
-                }
+            }).then(() => {
+                localStorage.removeItem('noprof_user');
+                location.reload();
             });
         }
     </script>
