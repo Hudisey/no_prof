@@ -45,7 +45,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .logo-title { font-size: 32px; font-weight: bold; letter-spacing: 2px; }
         .logo-subtitle { font-size: 11px; color: #737373; margin-top: -8px; }
         #app-screen { display: flex; width: 100%; height: 100%; }
-        .sidebar { width: 300px; background: var(--surface); border-right: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 10px; position: relative; }
+        .sidebar { width: 300px; max-width: 300px; background: var(--surface); border-right: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 10px; position: relative; overflow-x: hidden; box-sizing: border-box; }
         .chat-main { flex: 1; display: flex; flex-direction: column; }
         #chat-header { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--border); font-weight: bold; font-size: 14px; }
         #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; color: #555; }
@@ -67,8 +67,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .req-btn-reject { background: rgba(237,66,69,0.12); color: #ed4245; border-color: rgba(237,66,69,0.35); }
         .req-btn-reject:hover { background: #ed4245; color: #fff; transform: translateY(-1px) scale(1.05); }
         .req-btn:active { transform: scale(0.92); }
-        .self-info { display: flex; align-items: center; gap: 6px; }
-        #self-username { font-size: 12px; font-weight: bold; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .self-info { display: flex; align-items: center; gap: 6px; min-width: 0; flex-shrink: 0; }
+        #self-username { font-size: 12px; font-weight: bold; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sidebar-header-row { display: flex; justify-content: space-between; align-items: center; min-width: 0; gap: 8px; }
+        .sidebar-header-row h3 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
+        #action-row { min-width: 0; flex-wrap: wrap; }
+        #action-row input { min-width: 0; flex: 1 1 80px; }
+        #action-row button, #action-row .bell-container { flex-shrink: 0; }
         #requests-dropdown, #group-create-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
         .group-member-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 2px; cursor: pointer; }
         .group-member-row input { cursor: pointer; }
@@ -139,7 +144,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
         <div id="remote-audio-container" class="hidden"></div>
         <div class="sidebar">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="sidebar-header-row">
                 <h3 id="sidebar-title" style="font-size: 14px;">SOHBETLER</h3>
                 <div class="self-info">
                     <div id="self-avatar" class="friend-avatar-placeholder" style="width:26px; height:26px; font-size:11px;">?</div>
@@ -1141,15 +1146,12 @@ def reset():
     for key in keys_to_delete:
         del messages_db[key]
 
-    # 4) Remove this user from any groups; delete a group entirely if it
-    #    ends up with no members left
-    empty_group_ids = []
-    for gid, g in groups_db.items():
-        if username in g["members"]:
-            g["members"] = [m for m in g["members"] if m != username]
-            if not g["members"]:
-                empty_group_ids.append(gid)
-    for gid in empty_group_ids:
+    # 4) Any group this user belonged to is deleted entirely, for every
+    #    member - not just for this user. Deleting your account wipes the
+    #    whole group, unlike leaving it voluntarily (/api/group-leave),
+    #    which only removes you and keeps the group for everyone else.
+    own_group_ids = [gid for gid, g in groups_db.items() if username in g["members"]]
+    for gid in own_group_ids:
         del groups_db[gid]
         group_messages_db.pop(gid, None)
         group_calls.pop(gid, None)
