@@ -142,7 +142,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <button class="call-ctrl-btn hangup" onclick="leaveCall()" title="Aramadan ayrıl">📵</button>
             </div>
         </div>
-        <div id="remote-audio-container" class="hidden"></div>
+        <div id="remote-audio-container" style="position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none;"></div>
         <div class="sidebar">
             <div class="sidebar-header-row">
                 <h3 id="sidebar-title" style="font-size: 14px;">SOHBETLER</h3>
@@ -319,6 +319,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             document.getElementById('group-create-dropdown').style.top = top + 'px';
         }
         window.addEventListener('resize', positionDropdowns);
+
+        // Sekme kapatılırken/yenilenirken sunucuya "aramadan çıkıyorum" bilgisi
+        // gönderir (best-effort, cevap beklemez). /api/peer/register'daki
+        // "fresh" temizliği ana güvenlik ağı; bu sadece diğer katılımcıların
+        // görünümünün daha hızlı güncellenmesi için ek bir katman.
+        window.addEventListener('pagehide', () => {
+            if(!currentUser || !currentCallType || !currentCallId) return;
+            try {
+                if(currentCallType === 'dm') {
+                    navigator.sendBeacon('/api/call/dm/leave', new Blob([JSON.stringify({username: currentUser, call_id: currentCallId})], {type: 'application/json'}));
+                } else if(currentCallType === 'group') {
+                    navigator.sendBeacon('/api/call/group/leave', new Blob([JSON.stringify({username: currentUser, group_id: currentCallId})], {type: 'application/json'}));
+                }
+            } catch(e) {}
+        });
 
         function toggleRequests() {
             document.getElementById('group-create-dropdown').classList.add('hidden');
@@ -640,10 +655,36 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         // ==================== ARAMA (PeerJS) ====================
 
+        // Google'ın STUN sunucularının yanında ücretsiz genel bir TURN
+        // sunucusu (openrelay) da veriyoruz. STUN çoğu ağda P2P bağlantı
+        // kurmaya yeter ama simetrik NAT / kısıtlı ağlarda (mobil veri,
+        // bazı kurumsal ağlar) ses hiç akmaz - TURN olmadan sinyalleşme
+        // ("aranıyor", "katıldı" vs.) çalışır göründüğü halde ses gelmez.
+        const PEER_CONFIG = {
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                ]
+            }
+        };
+        let peerRegisteredOnce = false;
+
         function initPeer() {
             if(peer) return;
-            peer = new Peer();
-            peer.on('open', (id) => { registerPeerId(id); });
+            peer = new Peer(PEER_CONFIG);
+            peer.on('open', (id) => {
+                // "fresh: true" sadece bu sayfa yüklemesindeki İLK register'da
+                // gönderilir. Sunucu bunu görünce bizi eski/asılı kalmış
+                // arama kayıtlarından temizler (sayfa yenilendiğinde eski
+                // WebRTC bağlantıları zaten yok olmuştur, o yüzden "hala
+                // aramadaymışsın gibi" görünen durumu bu çözer).
+                registerPeerId(id, !peerRegisteredOnce);
+                peerRegisteredOnce = true;
+            });
             peer.on('call', (call) => {
                 if(!localStream) { call.close(); return; }
                 call.answer(localStream);
@@ -654,12 +695,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             peer.on('disconnected', () => { try { peer.reconnect(); } catch(e) {} });
         }
 
-        async function registerPeerId(id) {
+        async function registerPeerId(id, fresh) {
             if(!currentUser) return;
             try {
                 await fetch('/api/peer/register', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username: currentUser, peer_id: id})
+                    body: JSON.stringify({username: currentUser, peer_id: id, fresh: !!fresh})
                 });
             } catch(e) {}
         }
@@ -675,11 +716,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     audioEl = document.createElement('audio');
                     audioEl.id = 'audio-' + uname;
                     audioEl.autoplay = true;
+                    audioEl.playsInline = true;
                     document.getElementById('remote-audio-container').appendChild(audioEl);
                 }
                 audioEl.srcObject = remoteStream;
+                const tryPlay = () => audioEl.play().catch(() => {
+                    // Bazı tarayıcılar otomatik oynatmayı engelleyebiliyor;
+                    // bir sonraki tıklamada tekrar deneriz.
+                    document.addEventListener('click', () => audioEl.play().catch(() => {}), {once: true});
+                });
+                tryPlay();
             });
             call.on('close', () => cleanupParticipantAudio(uname));
+            call.on('error', (err) => console.error('Medya bağlantısı hatası (' + uname + '):', err));
         }
 
         function cleanupParticipantAudio(uname) {
@@ -726,7 +775,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         function showCallOverlay(title, participants) {
             document.getElementById('call-overlay').classList.remove('hidden');
-            document.getElementById('remote-audio-container').classList.remove('hidden');
             renderCallParticipants(participants || {[currentUser]: peer && peer.id}, title);
         }
 
@@ -882,7 +930,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             Object.values(peerConnections).forEach(c => { try { c.close(); } catch(e) {} });
             peerConnections = {};
             document.getElementById('remote-audio-container').innerHTML = '';
-            document.getElementById('remote-audio-container').classList.add('hidden');
             if(localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
             if(groupCallPollInterval) { clearInterval(groupCallPollInterval); groupCallPollInterval = null; }
             hideCallOverlay();
@@ -1206,9 +1253,26 @@ def peer_register():
     data = request.json or {}
     username = data.get('username')
     peer_id = data.get('peer_id')
+    fresh = bool(data.get('fresh'))
     if not username or not peer_id:
         return jsonify({"success": False, "error": "Eksik parametre!"}), 400
     peer_ids[username] = peer_id
+
+    if fresh:
+        # A brand new PeerJS connection ('open' fired for the first time
+        # this page load) means any call this user was previously marked
+        # as being "in" is stale - their old WebRTC connections are gone
+        # the moment the page reloaded/closed, but the in-memory call
+        # record can otherwise linger forever and permanently show them
+        # as busy. Clear it out here instead.
+        for call_id in [cid for cid, c in dm_calls.items() if username in c["participants"]]:
+            del dm_calls[call_id]
+        for gid, room in list(group_calls.items()):
+            if username in room["participants"]:
+                del room["participants"][username]
+                if not room["participants"]:
+                    del group_calls[gid]
+
     return jsonify({"success": True})
 
 @app.route('/api/call/dm/start', methods=['POST'])
