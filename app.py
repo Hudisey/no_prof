@@ -21,7 +21,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         #app-screen { display: flex; width: 100%; height: 100%; }
         .sidebar { width: 300px; background: var(--surface); border-right: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 10px; position: relative; }
         .chat-main { flex: 1; display: flex; flex-direction: column; }
-        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; align-items: center; justify-content: center; color: #555; }
+        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; color: #555; }
+        #chat-box.empty { align-items: center; justify-content: center; }
+        .msg-row { display: flex; width: 100%; }
+        .msg-row.sent { justify-content: flex-end; }
+        .msg-row.received { justify-content: flex-start; }
+        .msg-bubble { max-width: 60%; padding: 8px 12px; border-radius: 12px; font-size: 13px; word-wrap: break-word; }
+        .msg-row.sent .msg-bubble { background: #2b6cb0; color: #fff; border-bottom-right-radius: 2px; }
+        .msg-row.received .msg-bubble { background: var(--accent); color: var(--text); border-bottom-left-radius: 2px; }
         .msg-input-area { padding: 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
         #requests-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
         .req-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
@@ -84,6 +91,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let currentUser = localStorage.getItem('noprof_user');
         let currentChat = null;
         let isTr = true;
+        let pollingStarted = false;
 
         function login() {
             const usernameInput = document.getElementById('username-input').value.trim();
@@ -98,9 +106,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     localStorage.setItem('noprof_user', currentUser);
                     document.getElementById('login-screen').classList.add('hidden');
                     document.getElementById('app-screen').classList.remove('hidden');
-                    loadData();
+                    startPolling();
                 }
             });
+        }
+
+        function startPolling() {
+            loadData();
+            if(!pollingStarted) {
+                pollingStarted = true;
+                setInterval(loadData, 3000);
+            }
         }
 
         function toggleLang() {
@@ -148,7 +164,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         function openChat(username) {
             currentChat = username;
-            document.getElementById('chat-box').innerHTML = `<div style="color:#888; font-size:13px;">${username} ile sohbet başlıyor...</div>`;
+            const box = document.getElementById('chat-box');
+            box.classList.add('empty');
+            box.innerHTML = `<div style="color:#888; font-size:13px;">${username} ile sohbet başlıyor...</div>`;
             document.getElementById('msg-area').classList.remove('hidden');
         }
 
@@ -182,141 +200,4 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 const data = await res.json();
                 
                 const reqList = document.getElementById('requests-list');
-                const badge = document.getElementById('req-badge');
-                if (data.pending && data.pending.length > 0) {
-                    badge.classList.remove('hidden');
-                    badge.innerText = data.pending.length;
-                    reqList.innerHTML = data.pending.map(p => `
-                        <div class="req-item">
-                            <span style="font-weight:bold;">${p.username}</span>
-                            <div style="display:flex; gap:4px;">
-                                <button onclick="respondRequest('${p.username}', 'accept')" style="padding:2px 6px; font-size:11px;">✓</button>
-                                <button onclick="respondRequest('${p.username}', 'reject')" style="padding:2px 6px; font-size:11px; color:#ed4245;">✕</button>
-                            </div>
-                        </div>
-                    `).join('');
-                } else {
-                    badge.classList.add('hidden');
-                    reqList.innerHTML = `<div style="font-size:11px; color:#737373; text-align:center; padding: 6px;">${isTr ? 'İstek yok.' : 'No requests.'}</div>`;
-                }
-
-                const friendBox = document.getElementById('friend-box');
-                if (data.friends && data.friends.length > 0) {
-                    friendBox.innerHTML = data.friends.map(f => `
-                        <div class="friend-item" onclick="openChat('${f}')">
-                            <div style="width:30px; height:30px; background:#333; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold;">${f[0].toUpperCase()}</div>
-                            <span style="font-size:13px; font-weight:bold;">${f}</span>
-                        </div>
-                    `).join('');
-                } else {
-                    friendBox.innerHTML = `<div style="font-size:11px; color:#737373; text-align:center; padding: 10px;">${isTr ? 'Henüz arkadaşın yok.' : 'No friends yet.'}</div>`;
-                }
-            } catch(e) {}
-        }
-
-        function sendMessage() {
-            const msg = document.getElementById('msg-input').value.trim();
-            if(!msg) return;
-            document.getElementById('chat-box').innerHTML += `<div style="margin: 5px 0;"><b>${currentUser}:</b> ${msg}</div>`;
-            document.getElementById('msg-input').value = '';
-        }
-
-        if(currentUser) {
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('app-screen').classList.remove('hidden');
-            loadData();
-            setInterval(loadData, 3000);
-        }
-    </script>
-</body>
-</html>"""
-
-@app.route('/')
-def index():
-    return render_template_string(HTML_TEMPLATE)
-
-@app.route('/api/login', methods=['POST'])
-def login():
-    data = request.json or {}
-    username = data.get('username')
-    if not username:
-        return jsonify({"success": False, "error": "Kullanıcı adı gerekli!"}), 400
-    if username not in users_db:
-        users_db[username] = {"avatar": "", "pending": [], "friends": []}
-    return jsonify({"success": True, "username": username})
-
-@app.route('/api/user-data', methods=['GET'])
-def user_data():
-    username = request.args.get('username')
-    if not username or username not in users_db:
-        return jsonify({"pending": [], "friends": []})
-    u = users_db[username]
-    return jsonify({"pending": u.get("pending", []), "friends": u.get("friends", [])})
-
-@app.route('/api/friend-request', methods=['POST'])
-def friend_request():
-    data = request.json or {}
-    sender = data.get('username')
-    receiver = data.get('friend_username')
-    
-    if not sender or not receiver:
-        return jsonify({"success": False, "error": "Eksik parametre!"}), 400
-        
-    if sender not in users_db:
-        users_db[sender] = {"avatar": "", "pending": [], "friends": []}
-    if receiver not in users_db:
-        users_db[receiver] = {"avatar": "", "pending": [], "friends": []}
-        
-    if sender == receiver:
-        return jsonify({"success": False, "error": "Kendine istek atamazsın!"}), 400
-        
-    receiver_data = users_db[receiver]
-    if "pending" not in receiver_data:
-        receiver_data["pending"] = []
-        
-    existing_senders = [p["username"] for p in receiver_data["pending"]]
-    if sender in existing_senders:
-        return jsonify({"success": False, "error": "Zaten istek atılmış!"}), 400
-        
-    receiver_data["pending"].append({"username": sender})
-    return jsonify({"success": True})
-
-@app.route('/api/friend-action', methods=['POST'])
-def friend_action():
-    data = request.json or {}
-    username = data.get('username')
-    friend_username = data.get('friend_username')
-    action = data.get('action')
-    
-    if username in users_db:
-        users_db[username]["pending"] = [p for p in users_db[username]["pending"] if p["username"] != friend_username]
-        if action == 'accept':
-            if friend_username not in users_db[username]["friends"]:
-                users_db[username]["friends"].append(friend_username)
-            if friend_username in users_db:
-                if username not in users_db[friend_username]["friends"]:
-                    users_db[friend_username]["friends"].append(username)
-                    
-    return jsonify({"success": True})
-
-@app.route('/api/avatar', methods=['POST'])
-def avatar():
-    data = request.json or {}
-    username = data.get('username')
-    avatar_data = data.get('avatar')
-    
-    if username in users_db:
-        users_db[username]["avatar"] = avatar_data
-        return jsonify({"success": True})
-    return jsonify({"success": False}), 404
-
-@app.route('/api/reset', methods=['POST'])
-def reset():
-    data = request.json or {}
-    username = data.get('username')
-    if username in users_db:
-        del users_db[username]
-    return jsonify({"success": True})
-
-if __name__ == '__main__':
-    app.run(debug=True)
+                const badge =
