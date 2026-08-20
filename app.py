@@ -1,6 +1,9 @@
-from flask import Flask, request, jsonify, render_template_string
+import os
+from flask import Flask, request, jsonify, render_template_string, send_from_directory
 
 app = Flask(__name__)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 users_db = {}
 messages_db = {}
@@ -13,6 +16,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <title>NOPROF</title>
+    <link rel="icon" type="image/png" href="/favicon.ico">
     <style>
         :root { --bg: #000; --surface: #111; --border: #222; --text: #eee; --accent: #222; --accent-hover: #333; }
         [data-theme="light"] { --bg: #f4f4f4; --surface: #fff; --border: #ddd; --text: #111; --accent: #e4e4e4; --accent-hover: #d4d4d4; }
@@ -357,6 +361,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(BASE_DIR, 'noprof.png', mimetype='image/png')
+
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.json or {}
@@ -465,8 +473,25 @@ def avatar():
 def reset():
     data = request.json or {}
     username = data.get('username')
+
+    if not username:
+        return jsonify({"success": False, "error": "Eksik parametre!"}), 400
+
+    # 1) Remove this user's account entirely
     if username in users_db:
         del users_db[username]
+
+    # 2) Strip this user out of every other account's friends/pending lists
+    #    so no trace of the relationship remains on either side
+    for other_username, other_data in users_db.items():
+        other_data["friends"] = [f for f in other_data.get("friends", []) if f != username]
+        other_data["pending"] = [p for p in other_data.get("pending", []) if p.get("username") != username]
+
+    # 3) Delete every conversation this user was part of, for both sides
+    keys_to_delete = [key for key in messages_db.keys() if username in key.split("|")]
+    for key in keys_to_delete:
+        del messages_db[key]
+
     return jsonify({"success": True})
 
 if __name__ == '__main__':
