@@ -3,6 +3,10 @@ from flask import Flask, request, jsonify, render_template_string
 app = Flask(__name__)
 
 users_db = {}
+messages_db = {}
+
+def conv_key(a, b):
+    return "|".join(sorted([a, b]))
 
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="tr">
@@ -21,15 +25,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         #app-screen { display: flex; width: 100%; height: 100%; }
         .sidebar { width: 300px; background: var(--surface); border-right: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 10px; position: relative; }
         .chat-main { flex: 1; display: flex; flex-direction: column; }
-        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; color: #555; }
+        #chat-header { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--border); font-weight: bold; font-size: 14px; }
+        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; color: #555; }
         #chat-box.empty { align-items: center; justify-content: center; }
         .msg-row { display: flex; width: 100%; }
         .msg-row.sent { justify-content: flex-end; }
         .msg-row.received { justify-content: flex-start; }
-        .msg-bubble { max-width: 60%; padding: 8px 12px; border-radius: 12px; font-size: 13px; word-wrap: break-word; }
-        .msg-row.sent .msg-bubble { background: #2b6cb0; color: #fff; border-bottom-right-radius: 2px; }
-        .msg-row.received .msg-bubble { background: var(--accent); color: var(--text); border-bottom-left-radius: 2px; }
+        .msg-bubble { max-width: 75%; padding: 12px 18px; border-radius: 18px; font-size: 16px; line-height: 1.4; word-wrap: break-word; }
+        .msg-row.sent .msg-bubble { background: #2b6cb0; color: #fff; border-bottom-right-radius: 3px; }
+        .msg-row.received .msg-bubble { background: var(--accent); color: var(--text); border-bottom-left-radius: 3px; }
         .msg-input-area { padding: 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
+        .friend-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+        .friend-avatar-placeholder { width: 30px; height: 30px; background: #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
         #requests-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
         .req-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
         .friend-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
@@ -56,7 +63,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
     <div id="app-screen" class="hidden">
         <div class="sidebar">
-            <h3 id="sidebar-title" style="font-size: 14px;">SOHBETLER</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 id="sidebar-title" style="font-size: 14px;">SOHBETLER</h3>
+                <div id="self-avatar" class="friend-avatar-placeholder" style="width:26px; height:26px; font-size:11px;">?</div>
+            </div>
             <div style="display: flex; gap: 5px;">
                 <input type="text" id="friend-input" placeholder="Arkadaş ekle..." style="flex:1;">
                 <button onclick="sendFriendRequest()">+</button>
@@ -80,9 +90,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
         </div>
         <div class="chat-main">
-            <div id="chat-box">Bir sohbet seçin</div>
+            <div id="chat-header" class="hidden"></div>
+            <div id="chat-box" class="empty">Bir sohbet seçin</div>
             <div class="msg-input-area hidden" id="msg-area">
-                <input type="text" id="msg-input" style="flex:1" placeholder="Mesaj yaz...">
+                <input type="text" id="msg-input" style="flex:1" placeholder="Mesaj yaz..." onkeydown="if(event.key==='Enter') sendMessage();">
                 <button onclick="sendMessage()">GÖNDER</button>
             </div>
         </div>
@@ -92,6 +103,47 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let currentChat = null;
         let isTr = true;
         let pollingStarted = false;
+        let friendsData = {};
+        let chatPollInterval = null;
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.innerText = str;
+            return div.innerHTML;
+        }
+
+        function updateSelfAvatar(avatarData) {
+            const el = document.getElementById('self-avatar');
+            if(!el) return;
+            if(avatarData) {
+                el.innerHTML = `<img src="${avatarData}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+            } else {
+                el.innerText = currentUser ? currentUser[0].toUpperCase() : '?';
+            }
+        }
+
+        function resizeImage(file, maxSize) {
+            maxSize = maxSize || 128;
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        let w = img.width, h = img.height;
+                        if(w > h) { if(w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; } }
+                        else { if(h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; } }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', 0.85));
+                    };
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
 
         function login() {
             const usernameInput = document.getElementById('username-input').value.trim();
@@ -164,25 +216,63 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         function openChat(username) {
             currentChat = username;
-            const box = document.getElementById('chat-box');
-            box.classList.add('empty');
-            box.innerHTML = `<div style="color:#888; font-size:13px;">${username} ile sohbet başlıyor...</div>`;
+            const avatar = friendsData[username] || '';
+            const header = document.getElementById('chat-header');
+            header.classList.remove('hidden');
+            const avatarHtml = avatar
+                ? `<img class="friend-avatar" src="${avatar}">`
+                : `<div class="friend-avatar-placeholder">${username[0].toUpperCase()}</div>`;
+            header.innerHTML = `${avatarHtml}<span>${username}</span>`;
             document.getElementById('msg-area').classList.remove('hidden');
+
+            loadMessages();
+            if(chatPollInterval) clearInterval(chatPollInterval);
+            chatPollInterval = setInterval(loadMessages, 2000);
+        }
+
+        async function loadMessages() {
+            if(!currentChat || !currentUser) return;
+            try {
+                const res = await fetch(`/api/message?username=${encodeURIComponent(currentUser)}&with=${encodeURIComponent(currentChat)}`);
+                const data = await res.json();
+                const box = document.getElementById('chat-box');
+                if(data.messages && data.messages.length > 0) {
+                    box.classList.remove('empty');
+                    box.innerHTML = data.messages.map(m => `
+                        <div class="msg-row ${m.from === currentUser ? 'sent' : 'received'}">
+                            <div class="msg-bubble">${escapeHtml(m.text)}</div>
+                        </div>
+                    `).join('');
+                    box.scrollTop = box.scrollHeight;
+                } else {
+                    box.classList.add('empty');
+                    box.innerHTML = `<div style="color:#888; font-size:13px;">${currentChat} ile sohbet başlıyor...</div>`;
+                }
+            } catch(e) {}
         }
 
         async function uploadAvatar(input) {
             const file = input.files[0];
-            if(!file) return;
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                await fetch('/api/avatar', {
+            if(!file || !currentUser) return;
+            try {
+                const avatarData = await resizeImage(file);
+                const res = await fetch('/api/avatar', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username: currentUser, avatar: e.target.result})
+                    body: JSON.stringify({username: currentUser, avatar: avatarData})
                 });
-                alert(isTr ? "Profil güncellendi!" : "Profile updated!");
-            };
-            reader.readAsDataURL(file);
+                const resData = await res.json();
+                if(res.ok && resData.success) {
+                    updateSelfAvatar(avatarData);
+                    loadData();
+                    alert(isTr ? "Profil güncellendi!" : "Profile updated!");
+                } else {
+                    alert(isTr ? "Profil güncellenemedi!" : "Failed to update profile!");
+                }
+            } catch(e) {
+                alert(isTr ? "Resim yüklenirken hata oluştu!" : "Error uploading image!");
+            }
+            input.value = '';
         }
 
         async function deleteAccount() {
@@ -220,26 +310,38 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
                 const friendBox = document.getElementById('friend-box');
                 if (data.friends && data.friends.length > 0) {
-                    friendBox.innerHTML = data.friends.map(f => `
-                        <div class="friend-item" onclick="openChat('${f}')">
-                            <div style="width:30px; height:30px; background:#333; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold;">${f[0].toUpperCase()}</div>
-                            <span style="font-size:13px; font-weight:bold;">${f}</span>
-                        </div>
-                    `).join('');
+                    friendBox.innerHTML = data.friends.map(f => {
+                        friendsData[f.username] = f.avatar || '';
+                        const avatarHtml = f.avatar
+                            ? `<img class="friend-avatar" src="${f.avatar}">`
+                            : `<div class="friend-avatar-placeholder">${f.username[0].toUpperCase()}</div>`;
+                        return `
+                        <div class="friend-item" onclick="openChat('${f.username}')">
+                            ${avatarHtml}
+                            <span style="font-size:13px; font-weight:bold;">${f.username}</span>
+                        </div>`;
+                    }).join('');
                 } else {
                     friendBox.innerHTML = `<div style="font-size:11px; color:#737373; text-align:center; padding: 10px;">${isTr ? 'Henüz arkadaşın yok.' : 'No friends yet.'}</div>`;
                 }
+
+                updateSelfAvatar(data.avatar || '');
             } catch(e) {}
         }
 
-        function sendMessage() {
-            const msg = document.getElementById('msg-input').value.trim();
-            if(!msg) return;
-            const box = document.getElementById('chat-box');
-            box.classList.remove('empty');
-            box.innerHTML += `<div class="msg-row sent"><div class="msg-bubble">${msg}</div></div>`;
-            box.scrollTop = box.scrollHeight;
-            document.getElementById('msg-input').value = '';
+        async function sendMessage() {
+            const input = document.getElementById('msg-input');
+            const msg = input.value.trim();
+            if(!msg || !currentChat || !currentUser) return;
+            input.value = '';
+            try {
+                await fetch('/api/message', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username: currentUser, to: currentChat, text: msg})
+                });
+            } catch(e) {}
+            loadMessages();
         }
 
         if(currentUser) {
@@ -269,9 +371,38 @@ def login():
 def user_data():
     username = request.args.get('username')
     if not username or username not in users_db:
-        return jsonify({"pending": [], "friends": []})
+        return jsonify({"pending": [], "friends": [], "avatar": ""})
     u = users_db[username]
-    return jsonify({"pending": u.get("pending", []), "friends": u.get("friends", [])})
+    friends = [
+        {"username": f, "avatar": users_db.get(f, {}).get("avatar", "")}
+        for f in u.get("friends", [])
+    ]
+    return jsonify({"pending": u.get("pending", []), "friends": friends, "avatar": u.get("avatar", "")})
+
+@app.route('/api/message', methods=['GET'])
+def get_messages():
+    username = request.args.get('username')
+    other = request.args.get('with')
+    if not username or not other:
+        return jsonify({"messages": []})
+    key = conv_key(username, other)
+    return jsonify({"messages": messages_db.get(key, [])})
+
+@app.route('/api/message', methods=['POST'])
+def send_message():
+    data = request.json or {}
+    sender = data.get('username')
+    receiver = data.get('to')
+    text = (data.get('text') or '').strip()
+
+    if not sender or not receiver or not text:
+        return jsonify({"success": False, "error": "Eksik parametre!"}), 400
+
+    key = conv_key(sender, receiver)
+    if key not in messages_db:
+        messages_db[key] = []
+    messages_db[key].append({"from": sender, "text": text})
+    return jsonify({"success": True})
 
 @app.route('/api/friend-request', methods=['POST'])
 def friend_request():
