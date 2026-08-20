@@ -12,21 +12,8 @@ messages_db = {}
 groups_db = {}          # group_id -> {"name": str, "owner": str, "members": [usernames]}
 group_messages_db = {}  # group_id -> [{"from": username, "text": str}]
 
-peer_ids = {}    # username -> latest PeerJS peer id
-dm_calls = {}    # call_id -> {"from", "to", "participants": {username: peer_id}, "status": "ringing"|"active"}
-group_calls = {} # group_id -> {"participants": {username: peer_id}}   (room only exists while non-empty)
-
 def conv_key(a, b):
     return "|".join(sorted([a, b]))
-
-def is_user_busy(username):
-    for c in dm_calls.values():
-        if username in c["participants"]:
-            return True
-    for c in group_calls.values():
-        if username in c["participants"]:
-            return True
-    return False
 
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="tr">
@@ -34,7 +21,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <meta charset="UTF-8">
     <title>NOPROF</title>
     <link rel="icon" type="image/png" href="/noprof.png">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
     <style>
         :root { --bg: #000; --surface: #111; --border: #222; --text: #eee; --accent: #222; --accent-hover: #333; }
         [data-theme="light"] { --bg: #f4f4f4; --surface: #fff; --border: #ddd; --text: #111; --accent: #e4e4e4; --accent-hover: #d4d4d4; }
@@ -85,31 +71,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         input:focus { outline: none; border-color: #555; }
         button:hover { background: var(--accent-hover); }
         button:active { transform: scale(0.98); }
-
-        /* Arama / Çağrı */
-        #chat-header-actions { margin-left: auto; display: flex; gap: 6px; }
-        .header-icon-btn { width: 32px; height: 32px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-        .header-icon-btn.leave-btn { color: #ed4245; border-color: rgba(237,66,69,0.35); }
-
-        #incoming-call-modal, #call-overlay { position: fixed; z-index: 1000; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
-        #incoming-call-modal { top: 20px; right: 20px; width: 240px; border-radius: 12px; padding: 16px; text-align: center; }
-        #incoming-call-modal .ic-caller { font-size: 13px; font-weight: bold; margin-bottom: 4px; }
-        #incoming-call-modal .ic-sub { font-size: 11px; color: #888; margin-bottom: 12px; }
-        #incoming-call-modal .ic-actions { display: flex; gap: 10px; justify-content: center; }
-
-        #call-overlay { bottom: 20px; right: 20px; width: 250px; border-radius: 14px; padding: 14px; }
-        #call-overlay .call-title { font-size: 12px; font-weight: bold; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; color: #888; }
-        #call-overlay .call-title .dot { width: 7px; height: 7px; border-radius: 50%; background: #3ba55d; }
-        #call-participants { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; min-height: 46px; }
-        .call-avatar-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 52px; }
-        .call-avatar { width: 46px; height: 46px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 15px; border: 2px solid transparent; }
-        .call-avatar.speaking { border-color: #3ba55d; }
-        .call-avatar.self-muted { opacity: 0.5; }
-        .call-avatar-name { font-size: 9px; color: #888; max-width: 52px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .call-controls { display: flex; gap: 10px; justify-content: center; }
-        .call-ctrl-btn { width: 42px; height: 42px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 17px; }
-        .call-ctrl-btn.hangup { background: #ed4245; color: #fff; border-color: #ed4245; }
-        .call-ctrl-btn.muted { background: #ed4245; color: #fff; border-color: #ed4245; }
     </style>
 </head>
 <body data-theme="dark">
@@ -121,23 +82,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <button onclick="login()" style="width: 220px;">GİRİŞ YAP</button>
     </div>
     <div id="app-screen" class="hidden">
-        <div id="incoming-call-modal" class="hidden">
-            <div class="ic-caller" id="ic-caller-name"></div>
-            <div class="ic-sub" id="ic-sub-text"></div>
-            <div class="ic-actions">
-                <button class="call-ctrl-btn req-btn-accept" style="background:#3ba55d;color:#fff;border-color:#3ba55d;" onclick="acceptDmCall()">📞</button>
-                <button class="call-ctrl-btn hangup" onclick="declineDmCall()">✕</button>
-            </div>
-        </div>
-        <div id="call-overlay" class="hidden">
-            <div class="call-title"><span class="dot"></span><span id="call-title-text"></span></div>
-            <div id="call-participants"></div>
-            <div class="call-controls">
-                <button class="call-ctrl-btn" id="call-mute-btn" onclick="toggleMute()" title="Mikrofonu kapat">🎙️</button>
-                <button class="call-ctrl-btn hangup" onclick="leaveCall()" title="Aramadan ayrıl">📵</button>
-            </div>
-        </div>
-        <div id="remote-audio-container" class="hidden"></div>
         <div class="sidebar">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <h3 id="sidebar-title" style="font-size: 14px;">SOHBETLER</h3>
@@ -146,7 +90,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     <span id="self-username"></span>
                 </div>
             </div>
-            <div id="action-row" style="display: flex; gap: 5px;">
+            <div style="display: flex; gap: 5px;">
                 <input type="text" id="friend-input" placeholder="Arkadaş ekle..." style="flex:1;">
                 <button onclick="sendFriendRequest()">+</button>
                 <button onclick="toggleGroupCreate()" id="group-create-btn" title="Grup oluştur">👥</button>
@@ -197,19 +141,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let chatPollInterval = null;
         let currentFriendsList = [];
         let groupsData = {};
-
-        // --- Arama (PeerJS) durumu ---
-        let peer = null;
-        let localStream = null;
-        let peerConnections = {};   // username -> MediaConnection
-        let peerIdToUser = {};      // peer_id -> username
-        let inCall = false;
-        let currentCallId = null;   // dm call_id OR group_id
-        let currentCallType = null; // 'dm' | 'group'
-        let isMuted = false;
-        let callPollInterval = null;      // global poll for incoming dm calls
-        let groupCallPollInterval = null; // active while in a group call
-        let incomingCall = null;    // {call_id, from}
 
         function escapeHtml(str) {
             const div = document.createElement('div');
@@ -270,7 +201,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     document.getElementById('login-screen').classList.add('hidden');
                     document.getElementById('app-screen').classList.remove('hidden');
                     setSelfUsername();
-                    initPeer();
                     startPolling();
                 } else {
                     alert(data.error || (isTr ? "Giriş başarısız!" : "Login failed!"));
@@ -283,7 +213,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             if(!pollingStarted) {
                 pollingStarted = true;
                 setInterval(loadData, 3000);
-                callPollInterval = setInterval(pollDmCallState, 2000);
             }
         }
 
@@ -302,28 +231,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         function toggleSettings() { document.getElementById('settings-menu').classList.toggle('hidden'); }
 
-        // Dropdown'ların (istekler / grup oluştur) dikey konumunu, üstündeki
-        // satırın gerçek yüksekliğine göre hesaplar. Sabit "top: 120px" değeri
-        // içerik (rozet, uzun kullanıcı adı vb.) satırı büyüttüğünde dropdown'ın
-        // yanlış yerde/çakışık görünmesine sebep oluyordu.
-        function positionDropdowns() {
-            const row = document.getElementById('action-row');
-            if(!row) return;
-            const top = row.offsetTop + row.offsetHeight + 8;
-            document.getElementById('requests-dropdown').style.top = top + 'px';
-            document.getElementById('group-create-dropdown').style.top = top + 'px';
-        }
-        window.addEventListener('resize', positionDropdowns);
-
         function toggleRequests() {
             document.getElementById('group-create-dropdown').classList.add('hidden');
-            positionDropdowns();
             document.getElementById('requests-dropdown').classList.toggle('hidden');
         }
 
         function toggleGroupCreate() {
             document.getElementById('requests-dropdown').classList.add('hidden');
-            positionDropdowns();
             const dd = document.getElementById('group-create-dropdown');
             const opening = dd.classList.contains('hidden');
             dd.classList.toggle('hidden');
@@ -411,10 +325,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             const avatarHtml = avatar
                 ? `<img class="friend-avatar" src="${avatar}">`
                 : `<div class="friend-avatar-placeholder">${username[0].toUpperCase()}</div>`;
-            header.innerHTML = `${avatarHtml}<span>${username}</span>
-                <div id="chat-header-actions">
-                    <button class="header-icon-btn" onclick="startDmCall('${username}')" title="${isTr ? 'Sesli ara' : 'Voice call'}">📞</button>
-                </div>`;
+            header.innerHTML = `${avatarHtml}<span>${username}</span>`;
             document.getElementById('msg-area').classList.remove('hidden');
 
             loadMessages();
@@ -427,27 +338,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             const g = groupsData[groupId] || {name: groupId};
             const header = document.getElementById('chat-header');
             header.classList.remove('hidden');
-            header.innerHTML = `<div class="friend-avatar-placeholder">👥</div><span>${escapeHtml(g.name)}</span>
-                <div id="chat-header-actions">
-                    <button class="header-icon-btn" onclick="joinGroupCall('${groupId}')" title="${isTr ? 'Sesli sohbete katıl' : 'Join voice chat'}">📞</button>
-                    <button class="header-icon-btn leave-btn" onclick="leaveGroup('${groupId}')" title="${isTr ? 'Gruptan ayrıl' : 'Leave group'}">🚪</button>
-                </div>`;
+            header.innerHTML = `<div class="friend-avatar-placeholder">👥</div><span>${escapeHtml(g.name)}</span>`;
             document.getElementById('msg-area').classList.remove('hidden');
 
             loadMessages();
             if(chatPollInterval) clearInterval(chatPollInterval);
             chatPollInterval = setInterval(loadMessages, 2000);
-        }
-
-        async function leaveGroup(groupId) {
-            if(!confirm(isTr ? "Bu gruptan ayrılmak istediğine emin misin?" : "Are you sure you want to leave this group?")) return;
-            await fetch('/api/group-leave', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: currentUser, group_id: groupId})
-            });
-            closeChat();
-            loadData();
         }
 
         async function loadMessages() {
@@ -633,279 +529,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             loadMessages();
         }
 
-        // ==================== ARAMA (PeerJS) ====================
-
-        function initPeer() {
-            if(peer) return;
-            peer = new Peer();
-            peer.on('open', (id) => { registerPeerId(id); });
-            peer.on('call', (call) => {
-                if(!localStream) { call.close(); return; }
-                call.answer(localStream);
-                const uname = peerIdToUser[call.peer] || call.peer;
-                attachMediaConnection(call, uname);
-            });
-            peer.on('error', (err) => console.error('Peer hatası:', err));
-            peer.on('disconnected', () => { try { peer.reconnect(); } catch(e) {} });
-        }
-
-        async function registerPeerId(id) {
-            if(!currentUser) return;
-            try {
-                await fetch('/api/peer/register', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username: currentUser, peer_id: id})
-                });
-            } catch(e) {}
-        }
-
-        function updatePeerIdMap(participants) {
-            for(const [uname, pid] of Object.entries(participants || {})) peerIdToUser[pid] = uname;
-        }
-
-        function attachMediaConnection(call, uname) {
-            call.on('stream', (remoteStream) => {
-                let audioEl = document.getElementById('audio-' + uname);
-                if(!audioEl) {
-                    audioEl = document.createElement('audio');
-                    audioEl.id = 'audio-' + uname;
-                    audioEl.autoplay = true;
-                    document.getElementById('remote-audio-container').appendChild(audioEl);
-                }
-                audioEl.srcObject = remoteStream;
-            });
-            call.on('close', () => cleanupParticipantAudio(uname));
-        }
-
-        function cleanupParticipantAudio(uname) {
-            const audioEl = document.getElementById('audio-' + uname);
-            if(audioEl) audioEl.remove();
-            delete peerConnections[uname];
-        }
-
-        // participants: {username: peer_id} - dial anyone new we're not connected to yet.
-        // Only the alphabetically-lower username initiates, so each pair connects once.
-        function syncMeshConnections(participants) {
-            updatePeerIdMap(participants);
-            for(const [uname, pid] of Object.entries(participants || {})) {
-                if(uname === currentUser || peerConnections[uname] || !localStream) continue;
-                if(currentUser < uname) {
-                    const call = peer.call(pid, localStream);
-                    peerConnections[uname] = call;
-                    attachMediaConnection(call, uname);
-                }
-            }
-        }
-
-        function removeStaleConnections(participants) {
-            const stillHere = new Set(Object.keys(participants || {}));
-            for(const uname of Object.keys(peerConnections)) {
-                if(!stillHere.has(uname)) {
-                    try { peerConnections[uname].close(); } catch(e) {}
-                    cleanupParticipantAudio(uname);
-                }
-            }
-        }
-
-        function renderCallParticipants(participants, title) {
-            document.getElementById('call-title-text').innerText = title;
-            const box = document.getElementById('call-participants');
-            const names = Object.keys(participants || {});
-            box.innerHTML = names.map(uname => `
-                <div class="call-avatar-wrap">
-                    <div class="call-avatar ${uname === currentUser && isMuted ? 'self-muted' : ''}" id="call-avatar-${uname}">${uname[0].toUpperCase()}</div>
-                    <div class="call-avatar-name">${escapeHtml(uname === currentUser ? (isTr ? 'Sen' : 'You') : uname)}</div>
-                </div>
-            `).join('');
-        }
-
-        function showCallOverlay(title, participants) {
-            document.getElementById('call-overlay').classList.remove('hidden');
-            document.getElementById('remote-audio-container').classList.remove('hidden');
-            renderCallParticipants(participants || {[currentUser]: peer && peer.id}, title);
-        }
-
-        function hideCallOverlay() {
-            document.getElementById('call-overlay').classList.add('hidden');
-        }
-
-        async function getMic() {
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({audio: true});
-                return true;
-            } catch(e) {
-                alert(isTr ? "Mikrofon izni gerekli!" : "Microphone permission required!");
-                return false;
-            }
-        }
-
-        // ---- Özel (DM) arama ----
-        async function startDmCall(target) {
-            if(inCall) { alert(isTr ? "Zaten bir aramadasın!" : "You're already in a call!"); return; }
-            if(!peer || !peer.id) { alert(isTr ? "Bağlantı hazırlanıyor, birazdan tekrar dene." : "Still connecting, try again shortly."); return; }
-            if(!(await getMic())) return;
-            const res = await fetch('/api/call/dm/start', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: currentUser, to: target})
-            });
-            const data = await res.json();
-            if(!res.ok || !data.success) {
-                alert(data.error || (isTr ? "Arama başlatılamadı." : "Could not start call."));
-                localStream.getTracks().forEach(t => t.stop()); localStream = null;
-                return;
-            }
-            currentCallId = data.call_id;
-            currentCallType = 'dm';
-            inCall = true;
-            showCallOverlay(isTr ? `${target} aranıyor...` : `Calling ${target}...`, {[currentUser]: peer.id});
-        }
-
-        function showIncomingCall(callId, fromUser) {
-            incomingCall = {call_id: callId, from: fromUser};
-            document.getElementById('ic-caller-name').innerText = fromUser;
-            document.getElementById('ic-sub-text').innerText = isTr ? 'Sesli arama...' : 'Voice call...';
-            document.getElementById('incoming-call-modal').classList.remove('hidden');
-        }
-
-        function hideIncomingCall() {
-            incomingCall = null;
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-        }
-
-        async function acceptDmCall() {
-            if(!incomingCall) return;
-            const {call_id, from} = incomingCall;
-            hideIncomingCall();
-            if(!(await getMic())) return;
-            const res = await fetch('/api/call/dm/respond', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: currentUser, call_id, action: 'accept', peer_id: peer.id})
-            });
-            const data = await res.json();
-            if(!res.ok || !data.success) {
-                localStream.getTracks().forEach(t => t.stop()); localStream = null;
-                return;
-            }
-            currentCallId = call_id;
-            currentCallType = 'dm';
-            inCall = true;
-            syncMeshConnections(data.participants);
-            showCallOverlay(from, data.participants);
-        }
-
-        async function declineDmCall() {
-            if(!incomingCall) return;
-            const {call_id} = incomingCall;
-            hideIncomingCall();
-            try {
-                await fetch('/api/call/dm/respond', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username: currentUser, call_id, action: 'decline'})
-                });
-            } catch(e) {}
-        }
-
-        async function pollDmCallState() {
-            if(!currentUser) return;
-            try {
-                const res = await fetch(`/api/call/poll?username=${encodeURIComponent(currentUser)}`);
-                const data = await res.json();
-                if(data.state === 'incoming' && !inCall && !incomingCall) {
-                    showIncomingCall(data.call_id, data.from);
-                } else if(data.state === 'active' && currentCallType === 'dm' && data.call_id === currentCallId) {
-                    updatePeerIdMap(data.participants);
-                    syncMeshConnections(data.participants);
-                    const otherName = Object.keys(data.participants).find(u => u !== currentUser) || '';
-                    renderCallParticipants(data.participants, otherName);
-                } else if(data.state === 'idle') {
-                    if(incomingCall) hideIncomingCall();
-                    if(currentCallType === 'dm' && currentCallId) {
-                        // Karşı taraf reddetti ya da görüşme sona erdi.
-                        leaveCall(true);
-                    }
-                }
-            } catch(e) {}
-        }
-
-        // ---- Grup sesli sohbeti ----
-        async function joinGroupCall(groupId) {
-            if(inCall) { alert(isTr ? "Zaten bir aramadasın!" : "You're already in a call!"); return; }
-            if(!peer || !peer.id) { alert(isTr ? "Bağlantı hazırlanıyor, birazdan tekrar dene." : "Still connecting, try again shortly."); return; }
-            if(!(await getMic())) return;
-            const res = await fetch('/api/call/group/join', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: currentUser, group_id: groupId, peer_id: peer.id})
-            });
-            const data = await res.json();
-            if(!res.ok || !data.success) {
-                alert(data.error || (isTr ? "Sesli sohbete katılamadın." : "Could not join voice chat."));
-                localStream.getTracks().forEach(t => t.stop()); localStream = null;
-                return;
-            }
-            currentCallId = groupId;
-            currentCallType = 'group';
-            inCall = true;
-            syncMeshConnections(data.participants);
-            const gName = (groupsData[groupId] && groupsData[groupId].name) || groupId;
-            showCallOverlay(gName, data.participants);
-
-            if(groupCallPollInterval) clearInterval(groupCallPollInterval);
-            groupCallPollInterval = setInterval(async () => {
-                try {
-                    const r = await fetch(`/api/call/group/state?group_id=${encodeURIComponent(groupId)}`);
-                    const d = await r.json();
-                    syncMeshConnections(d.participants || {});
-                    removeStaleConnections(d.participants || {});
-                    renderCallParticipants(d.participants || {}, gName);
-                } catch(e) {}
-            }, 2000);
-        }
-
-        function toggleMute() {
-            if(!localStream) return;
-            isMuted = !isMuted;
-            localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
-            const btn = document.getElementById('call-mute-btn');
-            btn.innerText = isMuted ? '🔇' : '🎙️';
-            btn.classList.toggle('muted', isMuted);
-            const avatar = document.getElementById('call-avatar-' + currentUser);
-            if(avatar) avatar.classList.toggle('self-muted', isMuted);
-        }
-
-        async function leaveCall(skipServerNotify) {
-            const wasType = currentCallType, wasId = currentCallId;
-            Object.values(peerConnections).forEach(c => { try { c.close(); } catch(e) {} });
-            peerConnections = {};
-            document.getElementById('remote-audio-container').innerHTML = '';
-            document.getElementById('remote-audio-container').classList.add('hidden');
-            if(localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-            if(groupCallPollInterval) { clearInterval(groupCallPollInterval); groupCallPollInterval = null; }
-            hideCallOverlay();
-            isMuted = false;
-            inCall = false; currentCallId = null; currentCallType = null;
-
-            if(!skipServerNotify && wasType && wasId) {
-                try {
-                    if(wasType === 'dm') {
-                        await fetch('/api/call/dm/leave', {
-                            method: 'POST', headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({username: currentUser, call_id: wasId})
-                        });
-                    } else if(wasType === 'group') {
-                        await fetch('/api/call/group/leave', {
-                            method: 'POST', headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({username: currentUser, group_id: wasId})
-                        });
-                    }
-                } catch(e) {}
-            }
-        }
-
         if(currentUser) {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
             setSelfUsername();
-            initPeer();
             startPolling();
         }
     </script>
@@ -1152,178 +779,8 @@ def reset():
     for gid in empty_group_ids:
         del groups_db[gid]
         group_messages_db.pop(gid, None)
-        group_calls.pop(gid, None)
-
-    # 5) Clear any call/peer state so a deleted account can't linger in a
-    #    ringing call or a voice room.
-    peer_ids.pop(username, None)
-    for call_id in [cid for cid, c in dm_calls.items() if username in (c["from"], c["to"])]:
-        del dm_calls[call_id]
-    for gid, room in list(group_calls.items()):
-        if username in room["participants"]:
-            del room["participants"][username]
-            if not room["participants"]:
-                del group_calls[gid]
 
     return jsonify({"success": True})
-
-@app.route('/api/group-leave', methods=['POST'])
-def group_leave():
-    data = request.json or {}
-    username = data.get('username')
-    group_id = data.get('group_id')
-
-    if not username or not group_id:
-        return jsonify({"success": False, "error": "Eksik parametre!"}), 400
-    if group_id not in groups_db:
-        return jsonify({"success": False, "error": "Grup bulunamadı."}), 404
-
-    g = groups_db[group_id]
-    if username not in g["members"]:
-        return jsonify({"success": False, "error": "Bu grubun üyesi değilsin."}), 403
-
-    g["members"] = [m for m in g["members"] if m != username]
-    if not g["members"]:
-        del groups_db[group_id]
-        group_messages_db.pop(group_id, None)
-        group_calls.pop(group_id, None)
-    else:
-        # Kişi sesli sohbetteyse aramadan da çıkar.
-        gc = group_calls.get(group_id)
-        if gc and username in gc["participants"]:
-            del gc["participants"][username]
-            if not gc["participants"]:
-                del group_calls[group_id]
-
-    return jsonify({"success": True})
-
-# ==================== ARAMA (PeerJS sinyalleşme) ====================
-
-@app.route('/api/peer/register', methods=['POST'])
-def peer_register():
-    data = request.json or {}
-    username = data.get('username')
-    peer_id = data.get('peer_id')
-    if not username or not peer_id:
-        return jsonify({"success": False, "error": "Eksik parametre!"}), 400
-    peer_ids[username] = peer_id
-    return jsonify({"success": True})
-
-@app.route('/api/call/dm/start', methods=['POST'])
-def call_dm_start():
-    data = request.json or {}
-    username = data.get('username')
-    to = data.get('to')
-
-    if not username or not to:
-        return jsonify({"success": False, "error": "Eksik parametre!"}), 400
-    if to not in users_db:
-        return jsonify({"success": False, "error": "Kullanıcı bulunamadı."}), 404
-    if username not in peer_ids:
-        return jsonify({"success": False, "error": "Bağlantı hazır değil, tekrar dene."}), 400
-    if is_user_busy(username):
-        return jsonify({"success": False, "error": "Zaten bir aramadasın."}), 409
-    if is_user_busy(to):
-        return jsonify({"success": False, "error": "Kullanıcı meşgul.", "busy": True}), 409
-
-    call_id = uuid.uuid4().hex[:10]
-    dm_calls[call_id] = {
-        "from": username, "to": to,
-        "participants": {username: peer_ids[username]},
-        "status": "ringing",
-    }
-    return jsonify({"success": True, "call_id": call_id})
-
-@app.route('/api/call/dm/respond', methods=['POST'])
-def call_dm_respond():
-    data = request.json or {}
-    username = data.get('username')
-    call_id = data.get('call_id')
-    action = data.get('action')
-    peer_id = data.get('peer_id')
-
-    call = dm_calls.get(call_id)
-    if not call or username != call["to"]:
-        return jsonify({"success": False, "error": "Arama bulunamadı."}), 404
-
-    if action == 'decline':
-        del dm_calls[call_id]
-        return jsonify({"success": True})
-
-    if action == 'accept':
-        if not peer_id:
-            return jsonify({"success": False, "error": "Eksik parametre!"}), 400
-        call["participants"][username] = peer_id
-        call["status"] = "active"
-        return jsonify({"success": True, "participants": call["participants"]})
-
-    return jsonify({"success": False, "error": "Geçersiz aksiyon."}), 400
-
-@app.route('/api/call/dm/leave', methods=['POST'])
-def call_dm_leave():
-    data = request.json or {}
-    username = data.get('username')
-    call_id = data.get('call_id')
-
-    call = dm_calls.get(call_id)
-    if call:
-        call["participants"].pop(username, None)
-        if not call["participants"] or call["status"] == "ringing":
-            del dm_calls[call_id]
-    return jsonify({"success": True})
-
-@app.route('/api/call/poll', methods=['GET'])
-def call_poll():
-    username = request.args.get('username')
-    if not username:
-        return jsonify({"state": "idle"})
-
-    for call_id, call in dm_calls.items():
-        if username not in (call["from"], call["to"]):
-            continue
-        if username in call["participants"]:
-            return jsonify({"state": "active", "call_id": call_id, "call_type": "dm", "participants": call["participants"]})
-        if username == call["to"]:
-            return jsonify({"state": "incoming", "call_id": call_id, "from": call["from"]})
-        # username is the caller, still ringing
-        return jsonify({"state": "calling", "call_id": call_id, "to": call["to"]})
-
-    return jsonify({"state": "idle"})
-
-@app.route('/api/call/group/join', methods=['POST'])
-def call_group_join():
-    data = request.json or {}
-    username = data.get('username')
-    group_id = data.get('group_id')
-    peer_id = data.get('peer_id')
-
-    if not username or not group_id or not peer_id:
-        return jsonify({"success": False, "error": "Eksik parametre!"}), 400
-    if group_id not in groups_db or username not in groups_db[group_id]["members"]:
-        return jsonify({"success": False, "error": "Bu grubun üyesi değilsin."}), 403
-
-    room = group_calls.setdefault(group_id, {"participants": {}})
-    room["participants"][username] = peer_id
-    return jsonify({"success": True, "participants": room["participants"]})
-
-@app.route('/api/call/group/leave', methods=['POST'])
-def call_group_leave():
-    data = request.json or {}
-    username = data.get('username')
-    group_id = data.get('group_id')
-
-    room = group_calls.get(group_id)
-    if room:
-        room["participants"].pop(username, None)
-        if not room["participants"]:
-            del group_calls[group_id]
-    return jsonify({"success": True})
-
-@app.route('/api/call/group/state', methods=['GET'])
-def call_group_state():
-    group_id = request.args.get('group_id')
-    room = group_calls.get(group_id)
-    return jsonify({"participants": room["participants"] if room else {}})
 
 if __name__ == '__main__':
     app.run(debug=True)
