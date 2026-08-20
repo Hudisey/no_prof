@@ -16,7 +16,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <title>NOPROF</title>
-    <link rel="icon" type="image/png" href="/favicon.ico">
+    <link rel="icon" type="image/png" href="/noprof.png">
     <style>
         :root { --bg: #000; --surface: #111; --border: #222; --text: #eee; --accent: #222; --accent-hover: #333; }
         [data-theme="light"] { --bg: #f4f4f4; --surface: #fff; --border: #ddd; --text: #111; --accent: #e4e4e4; --accent-hover: #d4d4d4; }
@@ -218,6 +218,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             loadData();
         }
 
+        function closeChat() {
+            currentChat = null;
+            if(chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
+            document.getElementById('chat-header').classList.add('hidden');
+            document.getElementById('chat-header').innerHTML = '';
+            document.getElementById('msg-area').classList.add('hidden');
+            const box = document.getElementById('chat-box');
+            box.classList.add('empty');
+            box.innerHTML = isTr ? 'Bir sohbet seçin' : 'Select a chat';
+        }
+
         function openChat(username) {
             currentChat = username;
             const avatar = friendsData[username] || '';
@@ -329,6 +340,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     friendBox.innerHTML = `<div style="font-size:11px; color:#737373; text-align:center; padding: 10px;">${isTr ? 'Henüz arkadaşın yok.' : 'No friends yet.'}</div>`;
                 }
 
+                // If the chat currently open belongs to someone who is no longer
+                // a friend (their account was deleted, or they were unfriended),
+                // close the chat panel instead of leaving it open with stale data.
+                const stillFriends = (data.friends || []).some(f => f.username === currentChat);
+                if(currentChat && !stillFriends) {
+                    closeChat();
+                }
+
                 updateSelfAvatar(data.avatar || '');
             } catch(e) {}
         }
@@ -360,6 +379,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
+
+@app.route('/noprof.png')
+def favicon_png():
+    return send_from_directory(BASE_DIR, 'noprof.png', mimetype='image/png')
 
 @app.route('/favicon.ico')
 def favicon():
