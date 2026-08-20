@@ -182,6 +182,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
         </div>
         <div id="remote-audio-container" style="position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none;"></div>
+        <audio id="ringtone-audio" src="/noprof_audio.mp3" preload="auto" loop style="display:none;"></audio>
         <div class="sidebar">
             <div class="sidebar-header-row">
                 <h3 id="sidebar-title" style="font-size: 14px;">SOHBETLER</h3>
@@ -256,8 +257,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let groupCallPollInterval = null; // active while in a group call
         let incomingCall = null;    // {call_id, from}
         let dndEnabled = localStorage.getItem('noprof_dnd') === '1';
-        let ringAudioCtx = null;
-        let ringInterval = null;
 
         function escapeHtml(str) {
             const div = document.createElement('div');
@@ -372,35 +371,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         // ---- Gelen arama zil sesi (Web Audio API - dosya gerektirmez) ----
         function startRingtone() {
-            if(ringInterval) return;
-            try {
-                ringAudioCtx = ringAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
-                if(ringAudioCtx.state === 'suspended') ringAudioCtx.resume().catch(() => {});
-            } catch(e) { return; }
-
-            function playRingBurst() {
-                if(!ringAudioCtx) return;
-                const now = ringAudioCtx.currentTime;
-                [0, 0.42].forEach(offset => {
-                    const osc = ringAudioCtx.createOscillator();
-                    const gain = ringAudioCtx.createGain();
-                    osc.type = 'sine';
-                    osc.frequency.value = 950;
-                    gain.gain.setValueAtTime(0, now + offset);
-                    gain.gain.linearRampToValueAtTime(0.18, now + offset + 0.02);
-                    gain.gain.setValueAtTime(0.18, now + offset + 0.32);
-                    gain.gain.linearRampToValueAtTime(0, now + offset + 0.38);
-                    osc.connect(gain).connect(ringAudioCtx.destination);
-                    osc.start(now + offset);
-                    osc.stop(now + offset + 0.4);
-                });
-            }
-            playRingBurst();
-            ringInterval = setInterval(playRingBurst, 2000);
+            const audio = document.getElementById('ringtone-audio');
+            if(!audio) return;
+            audio.loop = true;
+            audio.currentTime = 0;
+            audio.play().catch(() => {
+                // Bazı tarayıcılar otomatik oynatmayı engelleyebiliyor;
+                // bir sonraki tıklamada tekrar dene.
+                document.addEventListener('click', () => audio.play().catch(() => {}), {once: true});
+            });
         }
 
         function stopRingtone() {
-            if(ringInterval) { clearInterval(ringInterval); ringInterval = null; }
+            const audio = document.getElementById('ringtone-audio');
+            if(audio) { audio.pause(); audio.currentTime = 0; }
         }
 
         // Dropdown'ların (istekler / grup oluştur) dikey konumunu, üstündeki
@@ -1104,6 +1088,10 @@ def index():
 @app.route('/noprof.png')
 def favicon_png():
     return send_from_directory(BASE_DIR, 'noprof.png', mimetype='image/png')
+
+@app.route('/noprof_audio.mp3')
+def ringtone_audio():
+    return send_from_directory(BASE_DIR, 'noprof_audio.mp3', mimetype='audio/mpeg')
 
 @app.route('/favicon.ico')
 def favicon():
