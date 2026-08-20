@@ -32,6 +32,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>NOPROF</title>
     <link rel="icon" type="image/png" href="/noprof.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
@@ -115,6 +116,40 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .call-ctrl-btn { width: 42px; height: 42px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 17px; }
         .call-ctrl-btn.hangup { background: #ed4245; color: #fff; border-color: #ed4245; }
         .call-ctrl-btn.muted { background: #ed4245; color: #fff; border-color: #ed4245; }
+
+        .back-btn { display: none; background: transparent; border: none; color: var(--text); font-size: 20px; padding: 4px 6px; cursor: pointer; flex-shrink: 0; }
+
+        /* ==================== TELEFON / MOBİL ==================== */
+        @media (max-width: 700px) {
+            html, body { font-size: 17px; }
+            #app-screen { position: relative; overflow: hidden; }
+            .sidebar, .chat-main { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; max-width: 100%; z-index: 1; }
+            body:not(.chat-open) .chat-main { display: none; }
+            body.chat-open .sidebar { display: none; }
+            .back-btn { display: flex; align-items: center; justify-content: center; }
+
+            input, button, .settings-btn { font-size: 16px; padding: 12px 14px; min-height: 46px; }
+            #action-row button, .bell-container button, #group-create-btn { min-width: 46px; padding: 10px; }
+            .header-icon-btn { width: 46px; height: 46px; font-size: 20px; }
+            .req-btn { width: 40px; height: 40px; font-size: 19px; }
+            .call-ctrl-btn { width: 52px; height: 52px; font-size: 20px; }
+
+            #chat-header { font-size: 17px; padding: 14px 16px; gap: 12px; }
+            .friend-avatar, .friend-avatar-placeholder { width: 40px; height: 40px; font-size: 16px; }
+            .msg-bubble { font-size: 17px; max-width: 85%; padding: 12px 16px; }
+            .msg-input-area { padding: 14px; }
+
+            .logo-title { font-size: 42px; }
+            .logo-subtitle { font-size: 13px; }
+            #username-input, #password-input, #login-screen > button { width: 82vw !important; max-width: 340px; }
+
+            #call-overlay { width: 88vw; max-width: 320px; bottom: 14px; right: 6vw; }
+            #incoming-call-modal { width: 88vw; max-width: 320px; top: 14px; right: 6vw; }
+            .call-avatar { width: 54px; height: 54px; font-size: 18px; }
+            .call-avatar-name { font-size: 11px; max-width: 60px; }
+
+            #requests-dropdown, #group-create-dropdown { width: 88vw; max-width: 320px; }
+        }
     </style>
 </head>
 <body data-theme="dark">
@@ -414,6 +449,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         function closeChat() {
             currentChat = null;
+            document.body.classList.remove('chat-open');
             if(chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
             document.getElementById('chat-header').classList.add('hidden');
             document.getElementById('chat-header').innerHTML = '';
@@ -425,13 +461,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         function openChat(username) {
             currentChat = username;
+            document.body.classList.add('chat-open');
             const avatar = friendsData[username] || '';
             const header = document.getElementById('chat-header');
             header.classList.remove('hidden');
             const avatarHtml = avatar
                 ? `<img class="friend-avatar" src="${avatar}">`
                 : `<div class="friend-avatar-placeholder">${username[0].toUpperCase()}</div>`;
-            header.innerHTML = `${avatarHtml}<span>${username}</span>
+            header.innerHTML = `<button class="back-btn" onclick="closeChat()">←</button>${avatarHtml}<span>${username}</span>
                 <div id="chat-header-actions">
                     <button class="header-icon-btn" onclick="startDmCall('${username}')" title="${isTr ? 'Sesli ara' : 'Voice call'}">📞</button>
                 </div>`;
@@ -444,10 +481,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         function openGroupChat(groupId) {
             currentChat = 'group:' + groupId;
+            document.body.classList.add('chat-open');
             const g = groupsData[groupId] || {name: groupId};
             const header = document.getElementById('chat-header');
             header.classList.remove('hidden');
-            header.innerHTML = `<div class="friend-avatar-placeholder">👥</div><span>${escapeHtml(g.name)}</span>
+            header.innerHTML = `<button class="back-btn" onclick="closeChat()">←</button><div class="friend-avatar-placeholder">👥</div><span>${escapeHtml(g.name)}</span>
                 <div id="chat-header-actions">
                     <button class="header-icon-btn" onclick="joinGroupCall('${groupId}')" title="${isTr ? 'Sesli sohbete katıl' : 'Join voice chat'}">📞</button>
                     <button class="header-icon-btn leave-btn" onclick="leaveGroup('${groupId}')" title="${isTr ? 'Gruptan ayrıl' : 'Leave group'}">🚪</button>
@@ -729,6 +767,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             });
             call.on('close', () => cleanupParticipantAudio(uname));
             call.on('error', (err) => console.error('Medya bağlantısı hatası (' + uname + '):', err));
+
+            // Ses gelmiyorsa: F12 > Console açıp buradaki [ICE ...] loglarına bak.
+            // "connected"/"completed" görürsen bağlantı kurulmuş demektir (ses
+            // gelmiyorsa başka bir sorun var). "failed" veya "checking"da takılı
+            // kalırsa STUN yetmemiş ve TURN sunucusuna da ulaşılamamış demektir
+            // (genelde paylaşımlı/ücretsiz TURN'ün o an kapasitesi dolu olur).
+            const pc = call.peerConnection;
+            if(pc) {
+                pc.oniceconnectionstatechange = () => {
+                    console.log(`[ICE ${uname}] durum:`, pc.iceConnectionState);
+                    if(pc.iceConnectionState === 'failed') {
+                        console.warn(`[ICE ${uname}] Bağlantı kurulamadı - TURN sunucusuna ulaşılamıyor olabilir.`);
+                    }
+                };
+                pc.onconnectionstatechange = () => console.log(`[PC ${uname}] durum:`, pc.connectionState);
+            }
         }
 
         function cleanupParticipantAudio(uname) {
