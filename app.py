@@ -1,5 +1,7 @@
 import os
+import uuid
 from flask import Flask, request, jsonify, render_template_string, send_from_directory
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 
@@ -7,6 +9,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 users_db = {}
 messages_db = {}
+groups_db = {}          # group_id -> {"name": str, "owner": str, "members": [usernames]}
+group_messages_db = {}  # group_id -> [{"from": username, "text": str}]
 
 def conv_key(a, b):
     return "|".join(sorted([a, b]))
@@ -41,8 +45,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .msg-input-area { padding: 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
         .friend-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
         .friend-avatar-placeholder { width: 30px; height: 30px; background: #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
-        #requests-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
-        .req-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+        .req-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--border); font-size: 12px; gap: 8px; }
+        .req-actions { display: flex; gap: 8px; }
+        .req-btn { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0; font-size: 17px; font-weight: bold; border: 1px solid transparent; line-height: 1; }
+        .req-btn-accept { background: rgba(59,165,93,0.15); color: #3ba55d; border-color: rgba(59,165,93,0.4); }
+        .req-btn-accept:hover { background: #3ba55d; color: #fff; transform: translateY(-1px) scale(1.05); }
+        .req-btn-reject { background: rgba(237,66,69,0.12); color: #ed4245; border-color: rgba(237,66,69,0.35); }
+        .req-btn-reject:hover { background: #ed4245; color: #fff; transform: translateY(-1px) scale(1.05); }
+        .req-btn:active { transform: scale(0.92); }
+        .self-info { display: flex; align-items: center; gap: 6px; }
+        #self-username { font-size: 12px; font-weight: bold; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #requests-dropdown, #group-create-dropdown { position: absolute; top: 120px; left: 15px; width: 270px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .group-member-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 2px; cursor: pointer; }
+        .group-member-row input { cursor: pointer; }
         .friend-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
         .friend-item:hover { background: var(--accent); border-color: var(--border); }
         .bell-container { position: relative; display: inline-block; }
@@ -63,17 +78,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="logo-title">NOPROF</div>
         <div class="logo-subtitle">(made by hudisey)</div>
         <input type="text" id="username-input" placeholder="Kullanıcı adı..." style="width: 220px; margin-top: 10px;">
+        <input type="password" id="password-input" placeholder="Şifre..." style="width: 220px;" onkeydown="if(event.key==='Enter') login();">
         <button onclick="login()" style="width: 220px;">GİRİŞ YAP</button>
     </div>
     <div id="app-screen" class="hidden">
         <div class="sidebar">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <h3 id="sidebar-title" style="font-size: 14px;">SOHBETLER</h3>
-                <div id="self-avatar" class="friend-avatar-placeholder" style="width:26px; height:26px; font-size:11px;">?</div>
+                <div class="self-info">
+                    <div id="self-avatar" class="friend-avatar-placeholder" style="width:26px; height:26px; font-size:11px;">?</div>
+                    <span id="self-username"></span>
+                </div>
             </div>
             <div style="display: flex; gap: 5px;">
                 <input type="text" id="friend-input" placeholder="Arkadaş ekle..." style="flex:1;">
                 <button onclick="sendFriendRequest()">+</button>
+                <button onclick="toggleGroupCreate()" id="group-create-btn" title="Grup oluştur">👥</button>
                 <div class="bell-container">
                     <button onclick="toggleRequests()">🔔</button>
                     <span id="req-badge" class="discord-badge hidden">0</span>
@@ -83,7 +103,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <div id="req-title" style="font-size: 10px; color: #888; margin-bottom: 6px;">GELEN İSTEKLER</div>
                 <div id="requests-list"></div>
             </div>
-            <div id="friend-box" style="flex:1; overflow-y: auto; margin-top: 5px; display: flex; flex-direction: column; gap: 4px;"></div>
+            <div id="group-create-dropdown" class="hidden">
+                <div id="group-create-title" style="font-size: 10px; color: #888; margin-bottom: 6px;">GRUP OLUŞTUR</div>
+                <input type="text" id="group-name-input" placeholder="Grup adı..." style="width:100%; margin-bottom:8px;">
+                <div id="group-member-list" style="max-height:150px; overflow-y:auto; display:flex; flex-direction:column; margin-bottom:8px;"></div>
+                <button onclick="createGroup()" style="width:100%;" id="group-create-submit">Oluştur</button>
+            </div>
+            <div id="chats-container" style="flex:1; overflow-y: auto; margin-top: 5px; display: flex; flex-direction: column; gap: 4px;">
+                <div id="friend-box"></div>
+                <div id="group-section-title" class="hidden" style="font-size:10px; color:#888; margin-top:10px;">GRUPLAR</div>
+                <div id="group-box" style="display:flex; flex-direction:column; gap:4px;"></div>
+            </div>
             <button onclick="toggleSettings()" class="settings-btn" style="justify-content: center; font-weight: bold;">⚙️ AYARLAR</button>
             <div id="settings-menu" class="hidden">
                 <button onclick="toggleTheme()" class="settings-btn">🌓 Tema Değiştir</button>
@@ -109,6 +139,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let pollingStarted = false;
         let friendsData = {};
         let chatPollInterval = null;
+        let currentFriendsList = [];
+        let groupsData = {};
 
         function escapeHtml(str) {
             const div = document.createElement('div');
@@ -124,6 +156,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             } else {
                 el.innerText = currentUser ? currentUser[0].toUpperCase() : '?';
             }
+        }
+
+        function setSelfUsername() {
+            const el = document.getElementById('self-username');
+            if(el) el.innerText = currentUser || '';
         }
 
         function resizeImage(file, maxSize) {
@@ -151,18 +188,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         function login() {
             const usernameInput = document.getElementById('username-input').value.trim();
-            if(!usernameInput) return;
+            const passwordInput = document.getElementById('password-input').value;
+            if(!usernameInput || !passwordInput) return;
             fetch('/api/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: usernameInput})
+                body: JSON.stringify({username: usernameInput, password: passwordInput})
             }).then(r => r.json()).then(data => {
                 if(data.success) {
                     currentUser = data.username;
                     localStorage.setItem('noprof_user', currentUser);
                     document.getElementById('login-screen').classList.add('hidden');
                     document.getElementById('app-screen').classList.remove('hidden');
+                    setSelfUsername();
                     startPolling();
+                } else {
+                    alert(data.error || (isTr ? "Giriş başarısız!" : "Login failed!"));
                 }
             });
         }
@@ -189,7 +230,54 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         function toggleSettings() { document.getElementById('settings-menu').classList.toggle('hidden'); }
-        function toggleRequests() { document.getElementById('requests-dropdown').classList.toggle('hidden'); }
+
+        function toggleRequests() {
+            document.getElementById('group-create-dropdown').classList.add('hidden');
+            document.getElementById('requests-dropdown').classList.toggle('hidden');
+        }
+
+        function toggleGroupCreate() {
+            document.getElementById('requests-dropdown').classList.add('hidden');
+            const dd = document.getElementById('group-create-dropdown');
+            const opening = dd.classList.contains('hidden');
+            dd.classList.toggle('hidden');
+            if(opening) renderGroupMemberChoices();
+        }
+
+        function renderGroupMemberChoices() {
+            const list = document.getElementById('group-member-list');
+            if(currentFriendsList.length === 0) {
+                list.innerHTML = `<div style="font-size:11px; color:#737373;">${isTr ? 'Gruba eklemek için önce arkadaş edinmelisin.' : 'Add friends first to add them to a group.'}</div>`;
+                return;
+            }
+            list.innerHTML = currentFriendsList.map(u => `
+                <label class="group-member-row">
+                    <input type="checkbox" class="group-member-checkbox" value="${u}">
+                    ${u}
+                </label>
+            `).join('');
+        }
+
+        async function createGroup() {
+            const name = document.getElementById('group-name-input').value.trim();
+            const checked = Array.from(document.querySelectorAll('.group-member-checkbox:checked')).map(cb => cb.value);
+            if(!name) { alert(isTr ? "Grup adı gir!" : "Enter a group name!"); return; }
+            if(checked.length === 0) { alert(isTr ? "En az bir arkadaş seç!" : "Select at least one friend!"); return; }
+
+            const res = await fetch('/api/group-create', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: currentUser, name, members: checked})
+            });
+            const resData = await res.json();
+            if(res.ok && resData.success) {
+                document.getElementById('group-name-input').value = '';
+                document.getElementById('group-create-dropdown').classList.add('hidden');
+                loadData();
+            } else {
+                alert(resData.error || (isTr ? "Grup oluşturulamadı!" : "Failed to create group!"));
+            }
+        }
         
         async function sendFriendRequest() {
             const friend_username = document.getElementById('friend-input').value.trim();
@@ -245,23 +333,59 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             chatPollInterval = setInterval(loadMessages, 2000);
         }
 
+        function openGroupChat(groupId) {
+            currentChat = 'group:' + groupId;
+            const g = groupsData[groupId] || {name: groupId};
+            const header = document.getElementById('chat-header');
+            header.classList.remove('hidden');
+            header.innerHTML = `<div class="friend-avatar-placeholder">👥</div><span>${escapeHtml(g.name)}</span>`;
+            document.getElementById('msg-area').classList.remove('hidden');
+
+            loadMessages();
+            if(chatPollInterval) clearInterval(chatPollInterval);
+            chatPollInterval = setInterval(loadMessages, 2000);
+        }
+
         async function loadMessages() {
             if(!currentChat || !currentUser) return;
+            const isGroup = currentChat.startsWith('group:');
+            const groupId = isGroup ? currentChat.slice(6) : null;
+
+            if(!isGroup) {
+                try {
+                    const existsRes = await fetch(`/api/exists?username=${encodeURIComponent(currentChat)}`);
+                    const existsData = await existsRes.json();
+                    if(!existsData.exists) {
+                        closeChat();
+                        return;
+                    }
+                } catch(e) {}
+            }
+
             try {
-                const res = await fetch(`/api/message?username=${encodeURIComponent(currentUser)}&with=${encodeURIComponent(currentChat)}`);
+                const url = isGroup
+                    ? `/api/group-message?group_id=${encodeURIComponent(groupId)}&username=${encodeURIComponent(currentUser)}`
+                    : `/api/message?username=${encodeURIComponent(currentUser)}&with=${encodeURIComponent(currentChat)}`;
+                const res = await fetch(url);
+                if(isGroup && (res.status === 403 || res.status === 404)) {
+                    closeChat();
+                    return;
+                }
                 const data = await res.json();
                 const box = document.getElementById('chat-box');
                 if(data.messages && data.messages.length > 0) {
                     box.classList.remove('empty');
                     box.innerHTML = data.messages.map(m => `
                         <div class="msg-row ${m.from === currentUser ? 'sent' : 'received'}">
-                            <div class="msg-bubble">${escapeHtml(m.text)}</div>
+                            <div class="msg-bubble">${(isGroup && m.from !== currentUser) ? `<div style="font-size:10px; opacity:0.7; margin-bottom:2px;">${escapeHtml(m.from)}</div>` : ''}${escapeHtml(m.text)}</div>
                         </div>
                     `).join('');
                     box.scrollTop = box.scrollHeight;
                 } else {
                     box.classList.add('empty');
-                    box.innerHTML = `<div style="color:#888; font-size:13px;">${currentChat} ile sohbet başlıyor...</div>`;
+                    box.innerHTML = isGroup
+                        ? `<div style="color:#888; font-size:13px;">${isTr ? 'Grup sohbeti başlıyor...' : 'Group chat starting...'}</div>`
+                        : `<div style="color:#888; font-size:13px;">${currentChat} ile sohbet başlıyor...</div>`;
                 }
             } catch(e) {}
         }
@@ -312,9 +436,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     reqList.innerHTML = data.pending.map(p => `
                         <div class="req-item">
                             <span style="font-weight:bold;">${p.username}</span>
-                            <div style="display:flex; gap:4px;">
-                                <button onclick="respondRequest('${p.username}', 'accept')" style="padding:2px 6px; font-size:11px;">✓</button>
-                                <button onclick="respondRequest('${p.username}', 'reject')" style="padding:2px 6px; font-size:11px; color:#ed4245;">✕</button>
+                            <div class="req-actions">
+                                <button class="req-btn req-btn-accept" onclick="respondRequest('${p.username}', 'accept')" title="${isTr ? 'Kabul et' : 'Accept'}">✓</button>
+                                <button class="req-btn req-btn-reject" onclick="respondRequest('${p.username}', 'reject')" title="${isTr ? 'Reddet' : 'Reject'}">✕</button>
                             </div>
                         </div>
                     `).join('');
@@ -324,6 +448,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 }
 
                 const friendBox = document.getElementById('friend-box');
+                currentFriendsList = (data.friends || []).map(f => f.username);
                 if (data.friends && data.friends.length > 0) {
                     friendBox.innerHTML = data.friends.map(f => {
                         friendsData[f.username] = f.avatar || '';
@@ -340,12 +465,37 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     friendBox.innerHTML = `<div style="font-size:11px; color:#737373; text-align:center; padding: 10px;">${isTr ? 'Henüz arkadaşın yok.' : 'No friends yet.'}</div>`;
                 }
 
+                // Groups
+                const gRes = await fetch(`/api/groups?username=${encodeURIComponent(currentUser)}`);
+                const gData = await gRes.json();
+                const groupBox = document.getElementById('group-box');
+                const groupTitle = document.getElementById('group-section-title');
+                if (gData.groups && gData.groups.length > 0) {
+                    groupTitle.classList.remove('hidden');
+                    groupBox.innerHTML = gData.groups.map(g => {
+                        groupsData[g.id] = g;
+                        return `
+                        <div class="friend-item" onclick="openGroupChat('${g.id}')">
+                            <div class="friend-avatar-placeholder">👥</div>
+                            <span style="font-size:13px; font-weight:bold;">${escapeHtml(g.name)}</span>
+                        </div>`;
+                    }).join('');
+                } else {
+                    groupTitle.classList.add('hidden');
+                    groupBox.innerHTML = '';
+                }
+
                 // If the chat currently open belongs to someone who is no longer
                 // a friend (their account was deleted, or they were unfriended),
                 // close the chat panel instead of leaving it open with stale data.
-                const stillFriends = (data.friends || []).some(f => f.username === currentChat);
-                if(currentChat && !stillFriends) {
-                    closeChat();
+                // Group chats are checked separately against the live groups list.
+                if(currentChat && currentChat.startsWith('group:')) {
+                    const gid = currentChat.slice(6);
+                    const stillMember = (gData.groups || []).some(g => g.id === gid);
+                    if(!stillMember) closeChat();
+                } else if(currentChat) {
+                    const stillFriends = currentFriendsList.includes(currentChat);
+                    if(!stillFriends) closeChat();
                 }
 
                 updateSelfAvatar(data.avatar || '');
@@ -357,12 +507,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             const msg = input.value.trim();
             if(!msg || !currentChat || !currentUser) return;
             input.value = '';
+            const isGroup = currentChat.startsWith('group:');
             try {
-                await fetch('/api/message', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username: currentUser, to: currentChat, text: msg})
-                });
+                const res = isGroup
+                    ? await fetch('/api/group-message', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({username: currentUser, group_id: currentChat.slice(6), text: msg})
+                    })
+                    : await fetch('/api/message', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({username: currentUser, to: currentChat, text: msg})
+                    });
+                const resData = await res.json();
+                if(!res.ok && (resData.receiver_missing || resData.not_member)) {
+                    closeChat();
+                    return;
+                }
             } catch(e) {}
             loadMessages();
         }
@@ -370,6 +532,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         if(currentUser) {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
+            setSelfUsername();
             startPolling();
         }
     </script>
@@ -392,10 +555,26 @@ def favicon():
 def login():
     data = request.json or {}
     username = data.get('username')
-    if not username:
-        return jsonify({"success": False, "error": "Kullanıcı adı gerekli!"}), 400
+    password = data.get('password')
+
+    if not username or not password:
+        return jsonify({"success": False, "error": "Kullanıcı adı ve şifre gerekli!"}), 400
+
     if username not in users_db:
-        users_db[username] = {"avatar": "", "pending": [], "friends": []}
+        users_db[username] = {
+            "avatar": "", "pending": [], "friends": [],
+            "password_hash": generate_password_hash(password)
+        }
+    else:
+        existing = users_db[username]
+        stored_hash = existing.get("password_hash")
+        if not stored_hash:
+            # Account only existed as a stub (e.g. someone sent them a friend
+            # request before they ever signed up) - this login claims it.
+            existing["password_hash"] = generate_password_hash(password)
+        elif not check_password_hash(stored_hash, password):
+            return jsonify({"success": False, "error": "Şifre yanlış!"}), 401
+
     return jsonify({"success": True, "username": username})
 
 @app.route('/api/user-data', methods=['GET'])
@@ -409,6 +588,11 @@ def user_data():
         for f in u.get("friends", [])
     ]
     return jsonify({"pending": u.get("pending", []), "friends": friends, "avatar": u.get("avatar", "")})
+
+@app.route('/api/exists', methods=['GET'])
+def user_exists():
+    username = request.args.get('username')
+    return jsonify({"exists": bool(username) and username in users_db})
 
 @app.route('/api/message', methods=['GET'])
 def get_messages():
@@ -429,10 +613,79 @@ def send_message():
     if not sender or not receiver or not text:
         return jsonify({"success": False, "error": "Eksik parametre!"}), 400
 
+    if receiver not in users_db:
+        return jsonify({"success": False, "error": "Kullanıcı artık mevcut değil.", "receiver_missing": True}), 404
+
     key = conv_key(sender, receiver)
     if key not in messages_db:
         messages_db[key] = []
     messages_db[key].append({"from": sender, "text": text})
+    return jsonify({"success": True})
+
+@app.route('/api/group-create', methods=['POST'])
+def group_create():
+    data = request.json or {}
+    username = data.get('username')
+    name = (data.get('name') or '').strip()
+    members = data.get('members') or []
+
+    if not username or username not in users_db:
+        return jsonify({"success": False, "error": "Geçersiz kullanıcı!"}), 400
+    if not name:
+        return jsonify({"success": False, "error": "Grup adı gerekli!"}), 400
+
+    # Only people who are actually friends of the creator can be added -
+    # never arbitrary usernames passed in from the client.
+    friends = set(users_db[username].get("friends", []))
+    valid_members = [m for m in members if m in friends]
+
+    if not valid_members:
+        return jsonify({"success": False, "error": "Geçerli arkadaş seçilmedi!"}), 400
+
+    group_id = uuid.uuid4().hex[:10]
+    all_members = list(dict.fromkeys([username] + valid_members))  # de-dupe, preserve order
+    groups_db[group_id] = {"name": name, "owner": username, "members": all_members}
+    group_messages_db[group_id] = []
+
+    return jsonify({"success": True, "id": group_id})
+
+@app.route('/api/groups', methods=['GET'])
+def list_groups():
+    username = request.args.get('username')
+    if not username:
+        return jsonify({"groups": []})
+    result = [
+        {"id": gid, "name": g["name"], "members": g["members"]}
+        for gid, g in groups_db.items()
+        if username in g["members"]
+    ]
+    return jsonify({"groups": result})
+
+@app.route('/api/group-message', methods=['GET'])
+def get_group_messages():
+    group_id = request.args.get('group_id')
+    username = request.args.get('username')
+    if not group_id or group_id not in groups_db:
+        return jsonify({"messages": [], "error": "Grup bulunamadı."}), 404
+    if not username or username not in groups_db[group_id]["members"]:
+        return jsonify({"messages": [], "error": "Bu grubun üyesi değilsin."}), 403
+    return jsonify({"messages": group_messages_db.get(group_id, [])})
+
+@app.route('/api/group-message', methods=['POST'])
+def send_group_message():
+    data = request.json or {}
+    username = data.get('username')
+    group_id = data.get('group_id')
+    text = (data.get('text') or '').strip()
+
+    if not username or not group_id or not text:
+        return jsonify({"success": False, "error": "Eksik parametre!"}), 400
+    if group_id not in groups_db:
+        return jsonify({"success": False, "error": "Grup bulunamadı.", "not_member": True}), 404
+    if username not in groups_db[group_id]["members"]:
+        return jsonify({"success": False, "error": "Bu grubun üyesi değilsin.", "not_member": True}), 403
+
+    group_messages_db.setdefault(group_id, []).append({"from": username, "text": text})
     return jsonify({"success": True})
 
 @app.route('/api/friend-request', methods=['POST'])
@@ -514,6 +767,18 @@ def reset():
     keys_to_delete = [key for key in messages_db.keys() if username in key.split("|")]
     for key in keys_to_delete:
         del messages_db[key]
+
+    # 4) Remove this user from any groups; delete a group entirely if it
+    #    ends up with no members left
+    empty_group_ids = []
+    for gid, g in groups_db.items():
+        if username in g["members"]:
+            g["members"] = [m for m in g["members"] if m != username]
+            if not g["members"]:
+                empty_group_ids.append(gid)
+    for gid in empty_group_ids:
+        del groups_db[gid]
+        group_messages_db.pop(gid, None)
 
     return jsonify({"success": True})
 
