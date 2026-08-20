@@ -218,7 +218,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <button onclick="toggleSettings()" class="settings-btn" style="justify-content: center; font-weight: bold;">⚙️ AYARLAR</button>
             <div id="settings-menu" class="hidden">
                 <button onclick="toggleTheme()" class="settings-btn">🌓 Tema Değiştir</button>
-                <button onclick="toggleLang()" class="settings-btn">🌍 Dil Değiştir (TR/EN)</button>
+                <button onclick="toggleLang()" class="settings-btn" id="lang-btn">🇹🇷 Türkçe</button>
                 <button onclick="document.getElementById('avatar-input').click()" class="settings-btn">🖼️ Profil Resmi Ekle</button>
                 <button onclick="toggleDnd()" class="settings-btn" id="dnd-btn">🔔 Rahatsız Etme: Kapalı</button>
                 <button onclick="deleteAccount()" class="settings-btn danger">❌ Hesabı Sil</button>
@@ -340,6 +340,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             document.getElementById('sidebar-title').innerText = isTr ? "SOHBETLER" : "CHATS";
             document.getElementById('req-title').innerText = isTr ? "GELEN İSTEKLER" : "FRIEND REQUESTS";
             document.getElementById('friend-input').placeholder = isTr ? "Arkadaş ekle..." : "Add friend...";
+            document.getElementById('lang-btn').innerHTML = isTr ? '🇹🇷 Türkçe' : '🇬🇧 English';
             updateDndButton();
             loadData();
         }
@@ -1091,7 +1092,7 @@ def favicon_png():
 
 @app.route('/noprof_audio.mp3')
 def ringtone_audio():
-    return send_from_directory(BASE_DIR, 'noprof_audio.mp3', mimetype='audio/mpeg')
+    return send_from_directory(BASE_DIR, 'noprof audio.mp3', mimetype='audio/mpeg')
 
 @app.route('/favicon.ico')
 def favicon():
