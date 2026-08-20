@@ -87,6 +87,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .settings-btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
         .settings-btn.danger { color: #ed4245; border-color: rgba(237,66,69,0.3); }
         .settings-btn.danger:hover { background: rgba(237,66,69,0.1); }
+        .settings-btn.dnd-on { background: rgba(59,165,93,0.15); border-color: rgba(59,165,93,0.5); color: #3ba55d; }
+        .settings-btn.dnd-on:hover { background: rgba(59,165,93,0.28); }
+        .settings-btn.dnd-off { background: rgba(237,66,69,0.12); border-color: rgba(237,66,69,0.4); color: #ed4245; }
+        .settings-btn.dnd-off:hover { background: rgba(237,66,69,0.22); }
         input, button { background: var(--accent); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-family: monospace; cursor: pointer; }
         input:focus { outline: none; border-color: #555; }
         button:hover { background: var(--accent-hover); }
@@ -215,6 +219,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <button onclick="toggleTheme()" class="settings-btn">🌓 Tema Değiştir</button>
                 <button onclick="toggleLang()" class="settings-btn">🌍 Dil Değiştir (TR/EN)</button>
                 <button onclick="document.getElementById('avatar-input').click()" class="settings-btn">🖼️ Profil Resmi Ekle</button>
+                <button onclick="toggleDnd()" class="settings-btn" id="dnd-btn">🔔 Rahatsız Etme: Kapalı</button>
                 <button onclick="deleteAccount()" class="settings-btn danger">❌ Hesabı Sil</button>
                 <input type="file" id="avatar-input" class="hidden" onchange="uploadAvatar(this)">
             </div>
@@ -250,6 +255,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let callPollInterval = null;      // global poll for incoming dm calls
         let groupCallPollInterval = null; // active while in a group call
         let incomingCall = null;    // {call_id, from}
+        let dndEnabled = localStorage.getItem('noprof_dnd') === '1';
+        let ringAudioCtx = null;
+        let ringInterval = null;
 
         function escapeHtml(str) {
             const div = document.createElement('div');
@@ -310,6 +318,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     document.getElementById('login-screen').classList.add('hidden');
                     document.getElementById('app-screen').classList.remove('hidden');
                     setSelfUsername();
+                    updateDndButton();
                     initPeer();
                     startPolling();
                 } else {
@@ -332,6 +341,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             document.getElementById('sidebar-title').innerText = isTr ? "SOHBETLER" : "CHATS";
             document.getElementById('req-title').innerText = isTr ? "GELEN İSTEKLER" : "FRIEND REQUESTS";
             document.getElementById('friend-input').placeholder = isTr ? "Arkadaş ekle..." : "Add friend...";
+            updateDndButton();
             loadData();
         }
 
@@ -341,6 +351,57 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         function toggleSettings() { document.getElementById('settings-menu').classList.toggle('hidden'); }
+
+        function updateDndButton() {
+            const btn = document.getElementById('dnd-btn');
+            if(!btn) return;
+            btn.classList.toggle('dnd-on', dndEnabled);
+            btn.classList.toggle('dnd-off', !dndEnabled);
+            btn.innerHTML = dndEnabled
+                ? (isTr ? '🔕 Rahatsız Etme: Açık' : '🔕 Do Not Disturb: On')
+                : (isTr ? '🔔 Rahatsız Etme: Kapalı' : '🔔 Do Not Disturb: Off');
+        }
+
+        function toggleDnd() {
+            dndEnabled = !dndEnabled;
+            localStorage.setItem('noprof_dnd', dndEnabled ? '1' : '0');
+            updateDndButton();
+            // DND açılırken zaten çalıyorsa zili de kes.
+            if(dndEnabled) stopRingtone();
+        }
+
+        // ---- Gelen arama zil sesi (Web Audio API - dosya gerektirmez) ----
+        function startRingtone() {
+            if(ringInterval) return;
+            try {
+                ringAudioCtx = ringAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+                if(ringAudioCtx.state === 'suspended') ringAudioCtx.resume().catch(() => {});
+            } catch(e) { return; }
+
+            function playRingBurst() {
+                if(!ringAudioCtx) return;
+                const now = ringAudioCtx.currentTime;
+                [0, 0.42].forEach(offset => {
+                    const osc = ringAudioCtx.createOscillator();
+                    const gain = ringAudioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.value = 950;
+                    gain.gain.setValueAtTime(0, now + offset);
+                    gain.gain.linearRampToValueAtTime(0.18, now + offset + 0.02);
+                    gain.gain.setValueAtTime(0.18, now + offset + 0.32);
+                    gain.gain.linearRampToValueAtTime(0, now + offset + 0.38);
+                    osc.connect(gain).connect(ringAudioCtx.destination);
+                    osc.start(now + offset);
+                    osc.stop(now + offset + 0.4);
+                });
+            }
+            playRingBurst();
+            ringInterval = setInterval(playRingBurst, 2000);
+        }
+
+        function stopRingtone() {
+            if(ringInterval) { clearInterval(ringInterval); ringInterval = null; }
+        }
 
         // Dropdown'ların (istekler / grup oluştur) dikey konumunu, üstündeki
         // satırın gerçek yüksekliğine göre hesaplar. Sabit "top: 120px" değeri
@@ -872,11 +933,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             document.getElementById('ic-caller-name').innerText = fromUser;
             document.getElementById('ic-sub-text').innerText = isTr ? 'Sesli arama...' : 'Voice call...';
             document.getElementById('incoming-call-modal').classList.remove('hidden');
+            startRingtone();
         }
 
         function hideIncomingCall() {
             incomingCall = null;
             document.getElementById('incoming-call-modal').classList.add('hidden');
+            stopRingtone();
+        }
+
+        // DND açıkken gelen aramayı zil çaldırmadan, modal göstermeden
+        // sessizce reddeder.
+        async function silentlyDeclineCall(callId) {
+            try {
+                await fetch('/api/call/dm/respond', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username: currentUser, call_id: callId, action: 'decline'})
+                });
+            } catch(e) {}
         }
 
         async function acceptDmCall() {
@@ -918,7 +992,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 const res = await fetch(`/api/call/poll?username=${encodeURIComponent(currentUser)}`);
                 const data = await res.json();
                 if(data.state === 'incoming' && !inCall && !incomingCall) {
-                    showIncomingCall(data.call_id, data.from);
+                    if(dndEnabled) {
+                        silentlyDeclineCall(data.call_id);
+                    } else {
+                        showIncomingCall(data.call_id, data.from);
+                    }
                 } else if(data.state === 'active' && currentCallType === 'dm' && data.call_id === currentCallId) {
                     updatePeerIdMap(data.participants);
                     syncMeshConnections(data.participants);
@@ -1011,6 +1089,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
             setSelfUsername();
+            updateDndButton();
             initPeer();
             startPolling();
         }
